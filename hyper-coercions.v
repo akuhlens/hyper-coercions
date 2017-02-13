@@ -283,23 +283,23 @@ Hint Resolve one_le_ty_depth.
 
 Fixpoint hc_depth h :=
   match h with
-  | HC _ m _ => 1 + hc_m_depth m
-  | Fail _ t _ => 1 + ty_depth t
+  | HC _ m _ => hc_m_depth m
+  | Fail _ t _ => 1
   end
 with
 hc_m_depth m :=
   match m with
   | Id_hc t => ty_depth t
   | Arr_hc t1 t2 t3 t4 h1 h2 =>
-    max (max (ty_depth (t1 → t2)) (ty_depth (t3 → t4)))
-        (max (hc_depth h1) (hc_depth h2))
+    1 + max (max (hc_depth h1) (max (ty_depth t3) (ty_depth t1)))
+            (max (hc_depth h2) (max (ty_depth t2) (ty_depth t4)))
   | Ref_hc t1 t2 h1 h2 =>
-    max (max (ty_depth (Ref t1)) (ty_depth (Ref t2)))
-        (max (hc_depth h1) (hc_depth h2))
+    1 + max (max (hc_depth h1) (hc_depth h2)) (max (ty_depth t1) (ty_depth t2))
   end. 
 
 Lemma one_le_hc_depth : forall h, 1 <= hc_depth h.
-Proof. destruct h; simpl; auto. Qed. 
+Proof. destruct h as [p [] i | p [] l]; simpl; auto. Qed. 
+
 
 Lemma max_spec_eq_r : forall n m, max n m = n -> m <= n.
 Proof.
@@ -344,15 +344,26 @@ Ltac max_dec_tac_context :=
 
 Ltac omega_max :=
   simpl in *;
-  repeat match goal with
-  | t: Ty |- _ => 
+  repeat
     match goal with
-    | H: 1 <= ty_depth t |- _ => fail 1
-    | _ => cut (1 <= ty_depth t); [ intro | solve [auto] | auto ..]
-    end
-  end; 
+    | t: Ty |- _ => 
+      match goal with
+      | H: 1 <= ty_depth t |- _ => fail 1
+      | _ => cut (1 <= ty_depth t); [ intro | solve [auto] | auto ..]
+      end
+    | h: hc |- _ => 
+      match goal with
+      | H: 1 <= hc_depth h |- _ => fail 1
+      | _ => cut (1 <= hc_depth h); [ intro | solve [auto] | auto ..]
+      end
+    end;
+  repeat
+    match goal with
+    | e: _ = _ |- _ => rewrite e
+    end;
   max_dec_tac_context; 
   omega_max_search 5;
+  max_dec_tac_context; 
   omega. 
   
 
@@ -384,7 +395,7 @@ Proof.
          mk_hc (t1, t2, l) h2 ->
          exists h', mk_hc (t2, t1, l) h'  /\ hc_depth h2 = hc_depth h')
    end).
-  + intros p m P i t1 t2 l H.
+  - intros p m P i t1 t2 l H.
     destruct m; inverts H;
       repeat match goal with
              | |- _ /\ _ => split
@@ -394,42 +405,19 @@ Proof.
              | IH: (forall t1 t2 l, _ -> _),
                    H: mk_hc _ ?h |-  _
                => apply IH in H
-             | _ =>     intuition (eauto; omega)
+             | _ => intuition (eauto; omega)
+             | _ =>
+               solve [eexists; split;
+                      [> eauto
+                      | omega_max]]
              end.
-    eexists. split. eauto. simpl.
-    repeat match goal with
-           | H: _ = _ |- _ => rewrite H in *
-           end.
-    omega_max_search 10; destruct (hc_depth H5); destruct (hc_depth H1);
-    repeat match goal with
-    | |- context[max ?t1 ?t2] =>
-      let e:=fresh in
-      destruct (Max.max_dec t1 t2) as [e|e];
-        rewrite e in *;
-        [ apply max_spec_eq_r in e |
-          apply max_spec_eq_l in e ]
-    end;
-    omega.
-        eexists. split. eauto. simpl.
-    repeat match goal with
-           | H: _ = _ |- _ => rewrite H in *
-           end.
-    omega_max_search 10; destruct (hc_depth H5); destruct (hc_depth H1);
-    repeat match goal with
-    | |- context[max ?t1 ?t2] =>
-      let e:=fresh in
-      destruct (Max.max_dec t1 t2) as [e|e];
-        rewrite e in *;
-        [ apply max_spec_eq_r in e |
-          apply max_spec_eq_l in e ]
-    end;
-    omega. 
-  + intros p t b t1 t2 l H. inversion H.
+  - intros p t b t1 t2 l H. inversion H.
     eexists. split. constructor. intro contra.
     inversion contra; subst;  auto. subst. 
-  + trivial.
-  + auto.
-  + auto.
+    auto. 
+  - trivial.
+  - auto.
+  - auto.
 Qed.
 
 Hint Resolve mk_hc_symetry.
@@ -533,17 +521,18 @@ Qed.
 
 Hint Resolve mk_hc_function.
   
-Lemma mk_hc_total : forall n t1 t2 l,
-    exists h, mk_hc (t1, t2, l) h /\ hc_depth h <= 1 + (max (ty_depth t1) (ty_depth t2)). 
+Lemma mk_hc_total : forall t1 t2 l,
+    exists h, mk_hc (t1, t2, l) h /\ hc_depth h <= max (ty_depth t1) (ty_depth t2). 
 Proof.
-  induction t1; destruct t2; intros; 
+  induction t1; destruct t2; intros;
+    (* apply IH when possible *)
     repeat (match goal with
             | IH: (forall t l,
                       exists h, mk_hc (?g, t, l) h /\ _),
                   T: Ty, L: blame_info |- _ =>
               match goal with
-              | H: mk_hc (g, T, L) _ |- _ =>
-                fail 1
+              | H: mk_hc (g, T, L) _ |- _ => fail 1
+              | |- context[mk_hc(_ → _, _ → _, _) _] => fail 1
               | _ =>
                 let h:=fresh in
                 let P1:=fresh in
@@ -551,15 +540,18 @@ Proof.
                 destruct (IH T L) as [h [P1 P2]]
               end
             end);
-    repeat match goal with
-           | H: mk_hc (?t1, ?t2, _) _ |- _ =>
-             match goal with
-             | H': mk_hc (t2, t1, _) _ |- _ =>
-               fail 1
-             | _ => 
-               destruct (mk_hc_symetry _ _ _ _ H)
-             end
-           end;
+    (* References and Functions need symmetry too *)
+    try match goal with
+        | H: mk_hc (?t1, ?t2, _) _ |- _ =>
+          match goal with
+          | H': mk_hc (t2, t1, _) _ |- _ => fail 1
+          | _ =>
+            let h:=fresh in
+            let P1:=fresh in
+            let P2:=fresh in
+            destruct (mk_hc_symetry _ _ _ _ H) as [h [P1 P2]]
+          end
+        end;
   (* case on whether the types are the same *)
   match goal with
   | |- context[mk_hc (?t1, ?t2, _) _] =>
@@ -568,56 +560,41 @@ Proof.
       [ try discriminate; inverts H |
         try solve [contradiction H; eauto] ]
   end;
+  (* solve by deriving proofs of existance and inequalities *)
   try solve [eexists; split;
              [econstructor; try eassumption; try prove_inconsistent; eauto
              | omega_max]].
   
-  + eexists. split; econstructor; try eassumption; eauto.
-    
-  lets: (one_le_ty_depth t1). 
-  lets: (one_le_ty_depth t2).
-  lets: (one_le_hc_depth x).
-  simpl. 
-  
-  simpl in *. 
-  max_dec_tac_context;
-  omega_max_search 5;
-  repeat match goal with
-         | |- context[match ?t with _ => _ end] => destruct t; idtac t
-         end;
-  try match goal with
-    | |- context[max ?t1 ?t2] =>
-      let e:=fresh in
-      destruct (Max.max_dec t1 t2) as [e|e];
-        rewrite e in *;
-        [ apply max_spec_eq_r in e |
-          apply max_spec_eq_l in e ]
-  end;
-  try omega.
-  jauto. 
-  
-  auto. 
-  omega_max_search . 
-  prove_inconsistent.
-
-  Check "Max.max". 
-  destruct (ty_depth (t2_1 → t2_2)). simpl. omega.  simpl. simpl in *. omega. unfold max.
-  destruct (ty_depth t1); omega_max.  eauto.   
-  auto. omega_max. econstructor. 
-  
-  simpl in *. omega_max. 
-
-  econstructor;
-  eauto.
-  auto. time omega_max. 
-
-  try discriminate;
-  try eassumption;
-  try prove_inconsistent;
+  Ltac min_depths_tac :=
+        match goal with 
+        | t: Ty |- _ =>
+          match goal with
+          | H: 1 <= ty_depth t |- _ => fail 1
+          | _ => cut (1 <= ty_depth t); [> intro | auto ..]
+          end
+        | h: hc |- _ =>
+          match goal with
+          | H: 1 <= hc_depth h |- _ => fail 1
+          | _ => cut (1 <= hc_depth h); [> intro | auto ..]
+          end
+        end.
+  (* My current tactics cause exponential blowup in the number of cases...
+     this is too much for the function case.
+     Find a way to search for these automatically *)
+  + destruct (IHt1_1 t2_1 l) as [h1 [P11 P12]].
+    destruct (IHt1_2 t2_2 l) as [h2 [P21 P22]].
+    destruct (mk_hc_symetry _ _ _ _ P11) as [h1r [P11' P12']].
+    eexists. split.
+    * econstructor; try eassumption; eauto.
+    * simpl.
+      max_dec_tac_context;
+      repeat match goal with
+      | H: _ = _ |- _ => rewrite H in *
+      end;
+      omega_max_search 10; auto;
+      max_dec_tac_context;
+      try omega. 
 Qed.
-
-
-
 
 
 Lemma mk_hc_not_dyn : forall t1 t2 l,
@@ -625,7 +602,7 @@ Lemma mk_hc_not_dyn : forall t1 t2 l,
     (exists m, mk_hc (t1, t2, l) (HC prj_mt m inj_mt)) \/ 
     (mk_hc (t1, t2, l) (Fail prj_mt t1 l)).
 Proof.
-  intros t1 t2 l H1 H2. destruct (mk_hc_total t1 t2 l) as [h mk_h]. 
+  intros t1 t2 l H1 H2. destruct (mk_hc_total t1 t2 l) as [h [mk_h bound]]. 
   inverts mk_h; eauto.
 Qed.
 
@@ -755,25 +732,19 @@ Ltac dupH H :=
   let P :=type of H in
   assert (H' : P); try exact H. 
 
-Check max. 
-Check ty_depth. 
-
 
 Lemma mk_hc_id : forall t l, mk_hc (t, t, l) (HC prj_mt (Id_hc t) inj_mt).
 Proof. intros [] l; auto. Qed. 
 
+(*
 Lemma mk_hc_id_size : forall t l p m i,
-    mk_hc (t, t, l) (HC p m i) -> hc_m_size m  <= ty_size t + ty_size t.
-Proof. intros. inverts H; reveal_minimum_sizes; try (simpl; omega).  
+    mk_hc (t, t, l) (HC p m i) -> hc_size (HC p m i)  = ty_size t. 
+Proof. intros. cut (mk_hc (t, t, l) (HC prj_mt (Id_hc t) inj_mt)); [intros | idtac ..].
+       Check mk_hc_function. apply mk_hc_function enough (H : mk_hc_id t l) by auto. . nverts H; repeat reveal_minimum_sizes; try (simpl; omega).  
        inverts H. (mk_hc_id t l).  intros t l h H. inverts H; reveal_minimum_sizes; simpl; try omega.
        inverts H. eauto. 
        auto. auto. omega. simpl in *.
-
-
-
-       
-
-(* )
+*)
 
  
 
@@ -876,11 +847,11 @@ Proof. intros m p i. destruct (hc_contains_self_containment (HC p m i)). auto. Q
 
 Hint Resolve hc_not_cyclic hcm_not_cyclic. 
 
-Lemma hc_m_lt_hc_depth : forall p m i,
-     hc_m_depth m < hc_depth (HC p m i). 
+Lemma hc_m_le_hc_depth : forall p m i,
+     hc_m_depth m <= hc_depth (HC p m i). 
 Proof. intros p m i. simpl. auto. Qed.
 
-Hint Resolve hc_m_lt_hc_depth. 
+Hint Resolve hc_m_le_hc_depth. 
 
 Lemma max_0_n : forall n, max 0 n = 0 -> n = 0.
 Proof. induction n; auto. Qed.
@@ -932,7 +903,9 @@ Ltac solve_inequality :=
     end;
     simpl in *; try omega. 
 
-Lemma hc_depth_lt_contained_hc : forall h,
+
+
+Lemma hc_size_lt_contained_hc : forall h,
     (forall h', hc_contains_hc h h' -> hc_size h' < hc_size h).
 Proof.
   intro h. 
@@ -968,6 +941,42 @@ Proof.
      end].
 Qed.
 
+Lemma hc_depth_lt_contained_hc : forall h,
+    (forall h', hc_contains_hc h h' -> hc_depth h' < hc_depth h).
+Proof.
+  intro h. 
+  elim h using hc_ind_mut with
+    (P := fun h => forall h',
+              hc_contains_hc h h' -> hc_depth h' < hc_depth h)
+    (P0 := fun m => forall h h',
+               hc_m_sub_hc m h ->
+               hc_contains_hc h h' -> hc_depth h' < hc_depth h);
+  intuition;
+  try rule_out_absurd_hc_contains;
+  solve
+    [match goal with
+     | H: hc_contains_hc _ _ |- _ => inverts H
+     end;
+     match goal with
+     | H: hc_m_sub_hc _ _ |- _ => inverts H
+       end;
+     try match goal with
+         | H: hc_contains_hc ?h _ ,
+              IH: context[hc_m_sub_hc _ _ -> hc_contains_hc _ _ -> _]
+           |- _ =>
+             apply IH in H; [> omega_max | solve [eauto] | idtac ..]
+         | _ => solve [omega_max; solve[auto]]
+         end] ||
+    solve
+    [match goal with
+     | H: hc_m_sub_hc _ _ |- _ => inverts keep H
+     end;
+     match goal with
+     | H: hc_contains_hc _ _ , IH: context[_ < _ ] |- ?g =>
+       solve [ apply IH; exact H]
+     end].
+Qed.
+
 
 (* Lemma hc_mk_m_depth : forall n h t1 t2 l,
     hc_size h <= n -> 
@@ -986,7 +995,7 @@ Proof. induction n;
 Theorem compose_hc_total' :
   forall n,
     (forall h1 h2 t1 t2 t3,
-        hc_size h1 + hc_size h2 <= n ->
+        hc_depth h1 + hc_depth h2 <= n ->
         hc_wt h1 (t1 ⇒ t2) ->
         hc_wt h2 (t2 ⇒ t3) ->
         exists h3, compose_hc (h1, h2) h3
