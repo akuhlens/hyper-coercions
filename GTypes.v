@@ -1,26 +1,18 @@
+Require Import General. 
 Require Import Coq.Bool.Bool. 
-
-Inductive Ty := 
-| Int   : Ty
-| Bool  : Ty
-| Dyn   : Ty
-| Ref   : Ty -> Ty
-| Arr   : Ty -> Ty -> Ty.
+Require Import LibTactics.
 
 
-Theorem ty_eqdec :
-  forall x y : Ty,
-    {x = y} + {x <> y}.
-Proof.                   
-  decide equality.
-Defined.
+Inductive ty := 
+| Int   : ty
+| Bool  : ty
+| Dyn   : ty
+| Ref   : ty -> ty
+| Arr   : ty -> ty -> ty. 
 
-Hint Constructors Ty. 
+Hint Constructors ty. 
 
 Notation "x → y" := (Arr x y) (at level 60, right associativity).
-
-Inductive Static (x : Ty) : Prop :=
-| NotDyn : x <> Dyn -> Static x.
 
 Fixpoint ty_depth t : nat :=
   match t with
@@ -29,7 +21,15 @@ Fixpoint ty_depth t : nat :=
   | _ => 1
   end.
 
-Fixpoint beq_ty (x y : Ty) : bool :=
+Open Scope depth_scope. 
+Instance ty_deep : Deep ty := ty_depth.
+
+Lemma ty_depth_le_0 : forall (t:ty), [| t |] <= 0 -> False. 
+Proof. unfold depth. intros [] H; inverts H. Qed.
+
+Hint Resolve ty_depth_le_0.
+  
+Fixpoint beq_ty (x y : ty) : bool :=
   match x, y with
     | Dyn, Dyn => true
     | Int, Int => true
@@ -38,6 +38,51 @@ Fixpoint beq_ty (x y : Ty) : bool :=
     | Ref t1, Ref t2 => beq_ty t1 t2
     | _, _ => false
   end.
+
+Inductive Static (x : ty) : Prop :=
+| NotDyn : x <> Dyn -> Static x.
+
+Inductive Cty :=
+| CArr : ty -> ty -> Cty.
+
+Notation "x ⇒ y" := (CArr x y) (at level 70, right associativity).
+
+Inductive consistent : ty -> ty -> Prop :=
+| Consistent_Dyn_L {t} : consistent Dyn t
+| Consistent_Dyn_R {t} : consistent t Dyn
+| Consistent_Eq {t} : consistent t t
+| Consistent_Arr {t1 t2 t3 t4} :
+    consistent t1 t3 -> consistent t2 t4 ->
+    consistent (t1 → t2) (t3 → t4)
+| Consistent_Ref {t1 t2} :
+    consistent t1 t2 -> consistent (Ref t1) (Ref t2).
+
+Hint Constructors consistent. 
+
+Definition inconsistent x y := consistent x y -> False. 
+Notation "x ∼ y" := (consistent x y) (at level 70, no associativity). 
+Notation "x ≁ y" := (x ∼ y -> False) (at level 70, no associativity).
+
+Inductive shallow_consistent : ty -> ty -> Prop :=
+| Shallow_Consistent_Dyn_L {t} : shallow_consistent Dyn t
+| Shallow_Consistent_Dyn_R {t} : shallow_consistent t Dyn
+| Shallow_Consistent_Eq {t} : shallow_consistent t t
+| Shallow_Consistent_Arr {t1 t2 t3 t4} : shallow_consistent (t1 → t2) (t3 → t4)
+| Shallow_Consistent_Ref {t1 t2} : shallow_consistent (Ref t1) (Ref t2).
+
+Hint Constructors shallow_consistent. 
+
+Definition shallow_inconsistent x y := consistent x y -> False. 
+Notation "x <∼> y" := (shallow_consistent x y) (at level 70, no associativity). 
+Notation "x <≁> y" := (x <∼> y -> False) (at level 70, no associativity).
+
+
+Theorem ty_eqdec :
+  forall x y : ty,
+    {x = y} + {x <> y}.
+Proof.                   
+  decide equality.
+Defined.
 
 Lemma beq_ty_t : forall x, beq_ty x x = true. 
 Proof.
@@ -51,21 +96,16 @@ Qed.
 
 Lemma neq_nbeq : forall t g, t <> g ->  beq_ty t g = false. 
 Proof.
-  induction t; intros [] H; intuition.
-  - destruct (ty_eqdec t t0).
-    + subst. contradiction H. reflexivity.
-    + apply IHt. assumption.
-  - destruct (ty_eqdec t1 t); destruct (ty_eqdec t2 t0);
-      try (subst; contradiction H; reflexivity);
-      simpl;
-      match goal with
-      | [ n: ?t <> _, IH: context[ beq_ty ?t _ = _ ]
-          |- _ ] =>
-        simpl; rewrite IH; clear IH
-      end;
-      try (apply andb_b_false);
-      try assumption;
-      reflexivity. 
+  induction t; intros [] H; tryfalse; jauto. 
+  - simpl. apply IHt. intuition congruence.
+  - destruct (ty_eqdec t1 t); destruct (ty_eqdec t2 t0).
+    try intuition congruence.
+    all: simpl.
+    all: repeat match goal with
+                | IH: context[ beq_ty ?t _ ] |- _  =>
+                  rewrite IH; [idtac | assumption]
+                end.
+    all: subst; try rewrite beq_ty_t; reflexivity.       
 Qed.
 
 Lemma beq_ty_iff : forall x y, beq_ty x y = true <-> x = y.
@@ -124,38 +164,14 @@ Proof.
   intros x y. split; destruct (beq_tyP x y); intros H; intuition. 
 Qed.
 
-
-      
-Inductive CTy :=
-| CArr : Ty -> Ty -> CTy.
-
-Notation "x ⇒ y" := (CArr x y) (at level 70, right associativity).
-
-Inductive consistent : Ty -> Ty -> Prop :=
-| Consistent_Dyn_L {t} : consistent Dyn t
-| Consistent_Dyn_R {t} : consistent t Dyn
-| Consistent_Eq {t} : consistent t t
-| Consistent_Arr {t1 t2 t3 t4} :
-    consistent t1 t3 -> consistent t2 t4 ->
-    consistent (t1 → t2) (t3 → t4)
-| Consistent_Ref {t1 t2} :
-    consistent t1 t2 -> consistent (Ref t1) (Ref t2).
-
-Hint Constructors consistent. 
-
-Definition inconsistent x y := consistent x y -> False. 
-Notation "x ∼ y" := (consistent x y) (at level 70, no associativity). 
-Notation "x ≁ y" := (x ∼ y -> False) (at level 70, no associativity).
-
-
 Theorem ty_consistency_dec :
-  forall x y : Ty, {x ∼ y} + {x ≁ y}.
+  forall x y : ty, {x ∼ y} + {x ≁ y}.
 Proof.
   induction x; destruct y;
     repeat
       match goal with
       | _ => progress auto
-      | h: forall y, { _ } + { _ }, t: Ty |- _ => specialize (h t)
+      | h: forall y, { _ } + { _ }, t: ty |- _ => specialize (h t)
       | h: {_} + {_} |- _ => destruct h
       | h: ?t ≁ ?t |- _ => contradiction h; constructor
       | h: _ ≁ _ |- _ => right                                  
@@ -164,27 +180,14 @@ Proof.
   end.
 Qed. 
 
-Inductive shallow_consistent : Ty -> Ty -> Prop :=
-| Shallow_Consistent_Dyn_L {t} : shallow_consistent Dyn t
-| Shallow_Consistent_Dyn_R {t} : shallow_consistent t Dyn
-| Shallow_Consistent_Eq {t} : shallow_consistent t t
-| Shallow_Consistent_Arr {t1 t2 t3 t4} : shallow_consistent (t1 → t2) (t3 → t4)
-| Shallow_Consistent_Ref {t1 t2} : shallow_consistent (Ref t1) (Ref t2).
-
-Hint Constructors shallow_consistent. 
-
-Definition shallow_inconsistent x y := consistent x y -> False. 
-Notation "x <∼> y" := (shallow_consistent x y) (at level 70, no associativity). 
-Notation "x <≁> y" := (x <∼> y -> False) (at level 70, no associativity).
-
 Theorem ty_shallow_consistency_dec :
-  forall x y : Ty, {x <∼> y} + {x <≁> y}.
+  forall x y : ty, {x <∼> y} + {x <≁> y}.
 Proof.
   induction x; destruct y;
     repeat
       match goal with
       | _ => progress auto
-      | h: forall y, { _ } + { _ }, t: Ty |- _ => specialize (h t)
+      | h: forall y, { _ } + { _ }, t: ty |- _ => specialize (h t)
       | h: {_} + {_} |- _ => destruct h
       | _ => right; intro h; inversion h
   end.
