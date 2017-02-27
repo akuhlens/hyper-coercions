@@ -8,6 +8,51 @@ Require Import Omega.
 Require Import coercions.
 Open Scope depth_scope. 
 
+Lemma ty_depth_min : forall (t : ty), 1 <= [| t |].
+Proof. induction t; unfold depth; simpl; omega. Qed. 
+
+Ltac spec_max_with_guard m n :=
+  match goal with
+  | H: m < n |- _ => fail 1
+  | H: n <= m |- _ => fail 1
+  | _ => 
+    let ineq:=fresh "ineq" in
+    let eq:=fresh  "eq" in
+    destruct (Max.max_spec m n) as [[ineq eq]|[ineq eq]];
+    rewrite eq in *
+  end.
+
+
+Ltac le_gives_eq_tac m n :=
+  let H:=fresh in
+  assert (H: m <= n);
+  [omega |
+   rewrite (Max.max_l m n H) in *;
+   rewrite (Max.max_r n m H) in *].
+
+
+Ltac omega_max :=
+  repeat match goal with
+         | _ => rewrite Max.max_0_l in *
+         | _ => rewrite Max.max_0_r in *
+         | _ => rewrite Max.max_idempotent in *
+         | _ => omega
+         | |- context[max ?m ?n] => spec_max_with_guard m n
+         | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
+         | |- context[match ?t with _ => _ end] =>
+           match goal with
+           | |- ?g => idtac g; destruct t
+           end
+         end.
+Ltac ineq_tac := unfold depth in *; cbn in *; omega_max.
+
+
+Inductive se_int : coercion -> Prop :=
+| se_int_Id  : forall t, se_int (ιc t)
+| se_int_Arr : forall c1 c2, se_int (c1 →c c2)
+| se_int_Ref : forall c1 c2, se_int (c1 #c c2). 
+
+Hint Constructors se_int. 
 
 Inductive  compose_se : coercion * coercion -> coercion -> Prop :=
 | Comp_Se_Inj_Prj : forall g t' t l i i' m c,
@@ -15,29 +60,38 @@ Inductive  compose_se : coercion * coercion -> coercion -> Prop :=
     compose_se (g, m) i' ->
     compose_se (i', i) c ->
     compose_se (Seq_c g (Inj_c t), Seq_c (Prj_c t' l) i) c
-| Comp_Se_Prj : forall t l i t'' s c,
-    se_inj_coercion i (t  ⇒ t'') ->
-    compose_se (i, s) c ->
-    compose_se (Seq_c (Prj_c t l) i, s) (Seq_c (Prj_c t l) c)
-| Comp_Se_Inj : forall g g' t t' t'' c,
-    se_inj_coercion g (t ⇒ t') ->
-    se_inj_coercion g' (t' ⇒ Dyn) ->
-    compose_se (g, g') c ->
-    compose_se (g, Seq_c g' (Inj_c t'')) (Seq_c c (Inj_c t''))              
 | Comp_Se_Arr   : forall c1 c2 c3 c4 c5 c6,
     compose_se (c3, c1) c5 ->
     compose_se (c2, c4) c6 ->
     compose_se (c1 →c c2, c3 →c c4) (c5 →c c6)
 | Comp_Se_Ref_c   : forall c1 c2 c3 c4 c5 c6,
-    compose_se (c3, c1) c5 ->
-    compose_se (c2, c4) c6 ->
+    compose_se (c1, c3) c5 ->
+    compose_se (c4, c2) c6 ->
     compose_se (Ref_c c1 c2, Ref_c c3 c4) (Ref_c c5 c6)
+| Comp_Se_Assoc_L : forall t l g c c',
+    compose_se (g , c) c' -> 
+    compose_se ((Prj_c t l);c g, c) ((Prj_c t l);c c')
+| Comp_Se_Assoc_R : forall g1 g2 t g3 t1 t2,
+    se_med_coercion g1 (t1 ⇒ t2) -> 
+    compose_se (g1 , g2) g3 -> 
+    compose_se (g1 , g2 ;c (Inj_c t)) (g3 ;c (Inj_c t))
+(* | Comp_Se_Prj : forall t l i t'' s c,
+   se_inj_coercion i (t  ⇒ t'') ->
+   compose_se (i, s) c ->
+   compose_se (Seq_c (Prj_c t l) i, s) (Seq_c (Prj_c t l) c) *)
+(* | Comp_Se_Inj : forall g g' t t' t'' c,
+   se_inj_coercion g (t ⇒ t') ->
+   se_inj_coercion g' (t' ⇒ Dyn) ->
+   compose_se (g, g') c ->
+   compose_se (g, Seq_c g' (Inj_c t'')) (Seq_c c (Inj_c t'')) *)
 | Comp_Se_Id_L : forall t c,
     compose_se (Id_c t, c) c
 | Comp_Se_Id_R : forall t c,
     compose_se (c, Id_c t) c
-| Compose_Fail_c_R : forall g t t' l,
-    se_med_coercion g (t ⇒ t') ->
+(* Consider compose (Prj t l; (g ;c (Inj t)), ⊥ l') (Prj t l; ⊥ l') *)
+(* This example is not well typed  ⊥ l  : t1 => t2 where t1 <> dyn *)
+| Compose_Fail_c_R : forall g l t1 t2,
+    se_med_coercion g (t1 ⇒ t2) -> 
     compose_se (g, Fail_c l) (Fail_c l)
 | Compose_Fail_c_L : forall c l,
     compose_se (Fail_c l, c) (Fail_c l).
@@ -52,12 +106,22 @@ Lemma compose_se_wt : forall n c1 c2 t1 t2 t3,
     exists c3, compose_se (c1, c2) c3 /\
           se_coercion c3 (t1 ⇒ t3) /\
           [| c3 |] <= max [| c1 |] [| c2 |].
-Proof. induction n.
-       - intuition. exfalso. eauto.  
-       - intuition. 
-         inverts H1; inverts H2; eauto. 
-         + inverts keep H7; inverts keep H8; eauto 6.
-           Ltac mk_se_tac t1 t2 l :=
+Proof.
+  Ltac reconstruct :=
+    solve[repeat match goal with
+                 | H: _ <> _ |- _ => solve [contradiction H; eauto]
+                 | _ => (* pushing the solves down one level prevent
+                           ineq_tac from running in cases that will
+                           ultimately fail *)
+                   eexists;
+                   split;
+                   [solve [eauto 7]
+                   | split;
+                     [ solve [eauto 7]
+                     | solve[ineq_tac]]]
+                 end].
+  induction n.
+  Ltac mk_se_tac t1 t2 l :=
              match goal with
              | H: make_se_coercion (t1, t2, l) _ |- _ => fail 1
              | _ => let x:= fresh  in
@@ -67,67 +131,257 @@ Proof. induction n.
              match goal with
              | |- context[compose_se (_ ;c (_ ;c Inj_c ?t), Prj_c ?g ?l ;c _) _] =>
                mk_se_tac t g l
-             end.
-           Lemma l1000 : forall n m p, max n m <= p -> n <= p /\ m <= p.
-           Proof. induction n; intros [] [] H; simpl in H; max_tac. Qed. 
-           Ltac l1000_tac :=
-             repeat match goal with
-                    | H: max _ _ <= _ |- _ => apply l1000 in H; destruct H
-                    end.
-
-           Ltac reconstruct :=
-             solve [eexists; split; [eauto 7 | split; [eauto 7 | solve[ineq_tac]]]].
-           * mk_se_tac'.
+             | |- context[compose_se (_ ;c Inj_c ?t, Prj_c ?g ?l ;c _) _] =>
+               mk_se_tac t g l
+             end;
              match goal with
              | H: make_se_coercion _ ?c |- _ => inverts keep H
-             end.
-             
-             all:
-               repeat
+             end;
+             repeat
+               match goal with
+               | H: make_se_coercion _ ?c |- _ => 
                  match goal with
-                 | H: make_se_coercion _ ?c |- _ => 
-                   match goal with
-                   | H: se_coercion c _ |- _ => fail 1
-                   | _ => let h:=fresh in
-                         apply make_se_coercion_wt in H as h
-                   end
-                 end.
-             all: try reconstruct. 
+                 | H: se_coercion c _ |- _ => fail 1
+                 | _ => let h:=fresh in
+                        apply make_se_coercion_wt in H as h
+                 end
+               end.
+           Ltac prj_inj_IH :=
+             repeat match goal with
+                    | H1: se_coercion ?c1 (_ ⇒ ?t),
+                          H2: se_coercion ?c2 (?t ⇒ _)
+                      |- _ =>
+                      match goal with
+                      | H: compose_se (c1, c2) _ /\ _ |- _ => fail 1
+                      | IH: forall c1 c2, _ |- _ =>
+                        time (edestruct (IH c1 c2);
+                              [idtac c1 c2 | idtac | solve[eauto] | solve[eauto] | idtac];
+                              [ineq_tac | ineq_tac | idtac])
+                      end
+                    end;
+             repeat match goal with
+                    | H: compose_se _ _ /\ _ |- _ =>
+                      let P1:=fresh in
+                      let P2:=fresh in
+                      let P3:=fresh in
+                      destruct H as [P1 [P2 P3]]
+                    end.
+           
+  - intuition. exfalso. eauto.  
+  - intros c1 c2 t1 t2 t3 b1 b2 wt1 wt2.  
+    inverts wt1; inverts wt2; eauto.
+    shelve. 
+    + inverts H3. 
+      * reconstruct. 
+      * inverts H1.
+        ++ reconstruct.
+        ++ reconstruct.
+        ++ reconstruct.
+      * inverts H5; inverts H1.
+        ++ reconstruct.
+        ++ reconstruct.
+        ++ reconstruct.
+        ++ reconstruct.
+        ++ inverts H3.
+           ** reconstruct.
+           ** prj_inj_IH. reconstruct.
+        ++ inverts H3. 
+           ** reconstruct. 
+           ** prj_inj_IH. reconstruct.
+        ++ reconstruct.
+        ++ inverts H3.
+           ** reconstruct.
+           ** prj_inj_IH. reconstruct.
+        ++ inverts H3.
+           ** reconstruct.
+           ** prj_inj_IH. reconstruct.
+    + inverts H3.
+      * reconstruct.
+      * mk_se_tac'.
+        ++ inverts H5; inverts H1.
+           ** reconstruct.
+           ** reconstruct.
+           ** reconstruct.
+           ** reconstruct.
+           ** inverts H8.
+              +++ reconstruct.
+              +++ prj_inj_IH. reconstruct.
+           ** inverts H8.
+              +++ reconstruct.
+              +++ prj_inj_IH. reconstruct.
+           ** reconstruct.
+           ** inverts H8.
+              +++ reconstruct.
+              +++ prj_inj_IH. reconstruct.
+           ** inverts H8.
+              +++ reconstruct.
+              +++ prj_inj_IH. reconstruct.
+        ++ reconstruct.
+        ++ inverts H1. reconstruct.
+        ++ inverts H1; inverts H5. 
+           ** reconstruct. 
+           ** inverts H10. 
+              +++ exists. split. eauto. split. eauto. ineq_tac.
+                  all: unfold depth in *.
+                  all: ineq_tac.
+                  (* I think ineq_tac needs to simplify periodically *)
+              +++ edestruct (IHn c2 c4) as [x [P1 [P2 P3]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  edestruct (IHn c3 c1) as [y [P4 [P5 P6]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+           ** inverts H10.
+              +++ exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+              +++ edestruct (IHn c2 c3) as [x [P1 [P2 P3]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  edestruct (IHn c0 c1) as [y [P4 [P5 P6]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+           ** edestruct (IHn c4 c2) as [x [P1 [P2 P3]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  edestruct (IHn c1 c3) as [y [P4 [P5 P6]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+           ** inverts H10. 
+              +++ edestruct (IHn c4 c2) as [x [P1 [P2 P3]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  edestruct (IHn c1 c3) as [y [P4 [P5 P6]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+              +++ edestruct (IHn c1 c3) as [x [P1 [P2 P3]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  edestruct (IHn c4 c2) as [y [P4 [P5 P6]]].
+                  unfold depth in *; cbn in *. ineq_tac.
+                  unfold depth in *; cbn in *. ineq_tac.
+                  eassumption. eassumption.
+                  
 
-             all: match goal with
-                  | H: se_med_coercion _ _ |- _ => inverts keep H3
-                  end.
+                  exists. split. eauto. split. eauto.
+                  unfold depth in *. cbn in *. ineq_tac.
+                  
+                  reconstruct. prj_inj_IH.  exists. split.  eauto. split. eauto. reconstruct.
+              +++(* I an not sure why prj_inj_IH didn't work here *)
+              +++ 
+                  
+                  exists. split. econstructor. eauto. eauto. 
+          reconstruct. 
+          Ltac mk_se_tac'' :=
+             match goal with
+             | |- context[compose_se (_ ;c (_ ;c Inj_c ?t), Prj_c ?g ?l ;c _) _] =>
+               mk_se_tac t g l
+             | |- context[compose_se (_ ;c Inj_c ?t, Prj_c ?g ?l ;c _) _] =>
+               idtac t g; try mk_se_tac t g l
+             end;
+             match goal with
+             | H: make_se_coercion _ ?c |- _ => inverts keep H
+             end;
+             repeat
+               match goal with
+               | H: make_se_coercion _ ?c |- _ => 
+                 match goal with
+                 | H: se_coercion c _ |- _ => fail 1
+                 | _ => let h:=fresh in
+                        apply make_se_coercion_wt in H as h
+                 end
+               end.
+          
+          mk_se_tac''. ** reconstruct. ++ reconstruct. * + ** eauto. exists. split. econstructor.  eauto. eauto. apply econstructor.  econstructor. eauto. reconstruct. 
+    + inverts H3. 
+       * reconstruct.
+       * mk_se_tac'.
+         ** inverts H1.
+            *** prj_inj_IH. 
+         eexists. split. econstructor. econstructor.  econstructor. econstructor.
+         eauto. solve[eauto]. split. solve[eauto]. ineq_tac. 
+           
+           
+             try reconstruct.
+                 
+           (*           Lemma l1000 : forall n m p, max n m <= p -> n <= p /\ m <= p.
+           Pr           oof. induction n; intros [] [] H; simpl in H; max_tac. Qed. 
+           Ltac l1000_ta     c :=
+             repeat match goal with
+                    | H: max _ _ <= _ |- _ => apply l1000 in H; destruct H
+                    end. 
+*)
+
+           * mk_se_tac'.
+             all: 
+             match goal with
+             | H: se_med_coercion _ _ |- _ => inverts keep H
+             end.
+             all: try reconstruct. 
+             prj_inj_IH.
+
+             ** - all: 
+             all: try reconstruct.
+           * mk_se_tac'.
+             all:
+               repeat match goal with
+                      | H: se_med_coercion _ _ |- _ => inverts H
+                      end.
+             all: try reconstruct.
+             all: prj_inj_IH.
+             all: try reconstruct.
+
+
+                 eexists.
+                 split. 
+                 econstructor. 
+                 econstructor.
+                 eauto.
+                 econstructor. 
+                 eauto.
+                 econstructor.
+                 econstructor. 
+                 econstructor. 
+                 eauto.
+                 econstructor.
+                 eauto. econstructor.
+                 econstructor.
+                 econstructor.
+                 eauto. intuition.
+                 
+                 reconstruct. 
+                 all: try solve[prj_inj_IH; reconstruct].
+                 
+                 all: 
 
              all: try match goal with
-                      | H: _ <> _ |- _ =>  solve [contradiction H; eauto]
+                      | H: _ <> _ |- _ =>  
                       end.
              all: try reconstruct.
 
-             Ltac prj_inj_IH :=
-               repeat match goal with
-                      | H1: se_coercion ?c1 (_ ⇒ ?t),
-                            H2: se_coercion ?c2 (?t ⇒ _)
-                        |- _ =>
-                        match goal with
-                        | H: compose_se (c1, c2) _ /\ _ |- _ => fail 1
-                        | IH: forall c1 c2, _ |- _ =>
-                          time (edestruct (IH c1 c2);
-                                [idtac | idtac | solve[eauto] | solve[eauto] | idtac];
-                                [ineq_tac | ineq_tac | idtac])
-                        end
-                      end;
-               repeat match goal with
-                      | H: compose_se _ _ /\ _ |- _ =>
-                        let P1:=fresh in
-                        let P2:=fresh in
-                        let P3:=fresh in
-                        destruct H as [P1 [P2 P3]]
-                      end.
+
                         
              -- prj_inj_IH. reconstruct. 
-             -- prj_inj_IH.
-
-                
+             -- prj_inj_IH. reconstruct. 
+           * mk_se_tac'. 
+             inverts keep  H9. 
+             
                 inverts keep H2.
                 inverts keep H40;
                   inverts keep H41.

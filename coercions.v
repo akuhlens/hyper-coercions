@@ -56,7 +56,9 @@ Inductive wt_coercion : coercion -> Cty -> Prop :=
     wt_coercion c1 (t1 ⇒ t2) ->
     wt_coercion c2 (t3 ⇒ t4) ->
     wt_coercion (c1 →c c2) ((t2 → t3) ⇒ (t1 → t4))
-| Wt_Fail_c : forall t1 t2 l, wt_coercion (⊥c l) (t1 ⇒ t2).
+| Wt_Fail_c : forall t1 t2 l,
+    t1 <> Dyn -> 
+    wt_coercion (⊥c l) (t1 ⇒ t2).
 
 Hint Constructors wt_coercion. 
 
@@ -73,6 +75,7 @@ Inductive se_coercion : coercion -> Cty -> Prop :=
     se_inj_coercion c (t1 ⇒ t2) -> 
     se_coercion (Prj_c t1 l ;c c) (Dyn ⇒ t2)
 | Se_Inj  : forall t1 t2 c,
+    t1 <> Dyn ->
     se_inj_coercion c (t1 ⇒ t2) -> 
     se_coercion c (t1 ⇒ t2)
 with se_inj_coercion : coercion -> Cty -> Prop := 
@@ -260,7 +263,10 @@ Qed.
 
 Lemma make_coercion_wt : forall c t1 t2 l,
     make_coercion (t1, t2, l) c -> wt_coercion c (t1 ⇒ t2). 
-Proof. induction c; inversion 1; constructor; eauto. Qed.        
+Proof.
+  induction c; inversion 1; constructor; eauto.
+  - intuition. contradiction H1. subst. auto. 
+Qed.        
 
 Hint Immediate make_coercion_wt. 
 
@@ -288,14 +294,15 @@ Ltac le_gives_eq_tac m n :=
 
 
 Ltac omega_max :=
-  repeat match goal with
-         | _ => rewrite Max.max_0_l in *
-         | _ => rewrite Max.max_0_r in *
-         | _ => rewrite Max.max_idempotent in *
-         | _ => omega
-         | |- context[max ?m ?n] => spec_max_with_guard m n
-         | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
-         end.
+  solve [repeat match goal with
+                | _ => rewrite Max.max_0_l in *
+                | _ => rewrite Max.max_0_r in *
+                | _ => rewrite Max.max_idempotent in *
+                | _ => omega
+                | |- context[max ?m ?n] => spec_max_with_guard m n
+                | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
+                | |- context[match ?t with _ => _ end] => destruct t
+                end].
 Ltac ineq_tac := unfold depth in *; simpl in *; omega_max.
 
 
@@ -397,7 +404,13 @@ Proof.
                  H: make_se_coercion _ ?c |- _ =>
              apply IH in H
            end;
-    eauto. 
+    eauto.
+  econstructor. congruence.
+  eauto. 
+  econstructor. congruence.
+  eauto. 
+  econstructor. intro. subst. contradiction H1. auto.
+  eauto.
 Qed. 
 
 Lemma make_se_coercion_symmetry : forall c1 t1 t2 l,
