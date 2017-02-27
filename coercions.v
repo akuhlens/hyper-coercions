@@ -278,7 +278,7 @@ Ltac spec_max_with_guard m n :=
     rewrite eq in *
   end.
 
-SearchAbout "max".
+
 Ltac le_gives_eq_tac m n :=
   let H:=fresh in
   assert (H: m <= n);

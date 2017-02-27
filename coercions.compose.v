@@ -1,4 +1,12 @@
-
+Require Import Coq.Init.Datatypes.
+Require Import LibTactics.
+Require Export General.
+Require Import GTypes. 
+Require Import Coq.Program.Tactics.
+Require Import Coq.Program.Wf.
+Require Import Omega.
+Require Import coercions.
+Open Scope depth_scope. 
 
 
 Inductive  compose_se : coercion * coercion -> coercion -> Prop :=
@@ -68,7 +76,7 @@ Proof. induction n.
                     end.
 
            Ltac reconstruct :=
-             solve [eexists; split; [eauto | split; [eauto | solve[ineq_tac]]]].
+             solve [eexists; split; [eauto 7 | split; [eauto 7 | solve[ineq_tac]]]].
            * mk_se_tac'.
              match goal with
              | H: make_se_coercion _ ?c |- _ => inverts keep H
@@ -95,15 +103,54 @@ Proof. induction n.
                       end.
              all: try reconstruct.
 
-             -- edestruct (IHn c0 c3);
-                  [ineq_tac | ineq_tac | eauto | eauto | idtac].
-                destruct H11 as [P1 [P2 P3]].
-                edestruct (IHn c4 c2);
-                  [ineq_tac | ineq_tac | eauto | eauto | idtac].
-                destruct H11 as [P4 [P5 P6]].
+             Ltac prj_inj_IH :=
+               repeat match goal with
+                      | H1: se_coercion ?c1 (_ ⇒ ?t),
+                            H2: se_coercion ?c2 (?t ⇒ _)
+                        |- _ =>
+                        match goal with
+                        | H: compose_se (c1, c2) _ /\ _ |- _ => fail 1
+                        | IH: forall c1 c2, _ |- _ =>
+                          time (edestruct (IH c1 c2);
+                                [idtac | idtac | solve[eauto] | solve[eauto] | idtac];
+                                [ineq_tac | ineq_tac | idtac])
+                        end
+                      end;
+               repeat match goal with
+                      | H: compose_se _ _ /\ _ |- _ =>
+                        let P1:=fresh in
+                        let P2:=fresh in
+                        let P3:=fresh in
+                        destruct H as [P1 [P2 P3]]
+                      end.
+                        
+             -- prj_inj_IH. reconstruct. 
+             -- prj_inj_IH.
+
+                
+                inverts keep H2.
+                inverts keep H40;
+                  inverts keep H41.
+                all: try reconstruct. 
+                all: try match goal with
+                         | H: _ <> _ |- _ => solve [contradiction H; congruence]
+                         end.
+                                          
                 exists. 
                 split.
+                econstructor. 
+                eauto.
                 econstructor.
+                eassumption.
+                econstructor.
+                inverts keep H17.
+                                eauto. 
+                                eauto.
+                econstructor.
+                eauto. 
+                eauto. 
+                eauto. 
+                econstructor. 
                 auto.
                 econstructor.
                 eassumption. 
@@ -114,9 +161,9 @@ Proof. induction n.
                 split.
                 eauto.
                 ineq_tac. 
-             -- edestruct (IHn c0 c3);
+             -- edestruct (IHn c0 c2);
                   [ineq_tac | ineq_tac | eauto | eauto | idtac].
-                destruct H11 as [P1 [P2 P3]].
+                eauto. destruct H11 as [P1 [P2 P3]].
                 edestruct (IHn c4 c2);
                   [ineq_tac | ineq_tac | eauto | eauto | idtac].
                 destruct H11 as [P4 [P5 P6]].
