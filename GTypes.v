@@ -236,5 +236,15 @@ Hint Resolve inconsistent_symetric shallow_inconsistent_symetric.
 
 Definition blame_info : Type := nat.
 
+Lemma ty_depth_min : forall (t : ty), 1 <= ty_depth t.
+Proof. induction t; unfold depth; simpl; eauto. 
+       - destruct (Max.max_spec (ty_depth t1) (ty_depth t2)) as [[]|[]].
+         * rewrite H1. auto. 
+         * rewrite H1. auto. 
+Qed.
 
+Hint Resolve ty_depth_min. 
+
+Lemma depth_t_min : forall (t : ty), 1 <= [| t |].
+Proof.  auto. Qed. 
 

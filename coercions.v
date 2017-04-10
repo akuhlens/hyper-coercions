@@ -8,13 +8,6 @@ Require Import Omega.
 
 Open Scope depth_scope. 
 
-(* Library worthy *)
-Ltac cut_if_not_hypothesis h :=
-  match goal with
-  |  H: h |- _ => fail 1
-  | _ => cut h
-  end. 
-
 Definition Label : Type := nat. 
 
 (* The main definition in Question *) 
@@ -23,15 +16,16 @@ Inductive coercion :=
 | Prj_c  : ty -> Label -> coercion                          
 | Inj_c  : ty -> coercion
 | Seq_c  : coercion -> coercion -> coercion
+(* Ref_c write read *)
 | Ref_c  : coercion -> coercion -> coercion
 | Arr_c  : coercion -> coercion -> coercion                           
-| Fail_c : Label -> coercion.
+| Fail_c : ty -> Label -> ty -> coercion.
 
 Notation "'ιc' t" := (Id_c t) (at level 50) : coercion_scope. 
 Notation "t →c g" := (Arr_c t g) (at level 70, right associativity) : coercion_scope. 
 Notation "t #c g"  := (Ref_c t g) (at level 70, right associativity) : coercion_scope. 
 Notation "x ';c' y" := (Seq_c x y) (at level 74, left associativity) : coercion_scope.
-Notation "⊥c l" := (Fail_c l) (at level 0): coercion_scope. 
+Notation "⊥c t l g" := (Fail_c t l g) (at level 0): coercion_scope. 
 
 Open Scope coercion_scope.
 
@@ -49,16 +43,15 @@ Inductive wt_coercion : coercion -> Cty -> Prop :=
     wt_coercion c2 (t2 ⇒ t3) ->
     wt_coercion (c1 ;c c2) (t1 ⇒ t3)
 | Wt_Ref_c  : forall t1 t2 c1 c2,
-    wt_coercion c1 (t1 ⇒ t2) ->
-    wt_coercion c2 (t2 ⇒ t1) ->
+    wt_coercion c1 (t2 ⇒ t1) ->
+    wt_coercion c2 (t1 ⇒ t2) ->
     wt_coercion (c1 #c c2) ((Ref t1) ⇒ (Ref t2))
-| Wt_Arr_c  : forall t1 t2 t3 t4 c1 c2,
-    wt_coercion c1 (t1 ⇒ t2) ->
-    wt_coercion c2 (t3 ⇒ t4) ->
-    wt_coercion (c1 →c c2) ((t2 → t3) ⇒ (t1 → t4))
+| Wt_Arr_c  : forall t1 t2 g1 g2 c1 c2,
+    wt_coercion c1 (g1 ⇒ t1) ->
+    wt_coercion c2 (t2 ⇒ g2) ->
+    wt_coercion (c1 →c c2) ((t1 → t2) ⇒ (g1 → g2))
 | Wt_Fail_c : forall t1 t2 l,
-    t1 <> Dyn -> 
-    wt_coercion (⊥c l) (t1 ⇒ t2).
+    t1 <> Dyn -> wt_coercion (Fail_c t1 l t2) (t1 ⇒ t2).
 
 Hint Constructors wt_coercion. 
 
@@ -80,7 +73,7 @@ Inductive se_coercion : coercion -> Cty -> Prop :=
     se_coercion c (t1 ⇒ t2)
 with se_inj_coercion : coercion -> Cty -> Prop := 
 | Se_Inj_Fail : forall t1 t2 l,
-    se_inj_coercion (⊥c l) (t1 ⇒ t2)
+    se_inj_coercion (Fail_c t1 l t2) (t1 ⇒ t2)
 | Se_Inj_Med  : forall t1 t2 c,
     se_med_coercion c (t1 ⇒ t2) ->
     se_inj_coercion (c ;c Inj_c t2) (t1 ⇒ Dyn)
@@ -91,13 +84,13 @@ with se_med_coercion : coercion -> Cty -> Prop :=
 | Se_Med_Id : forall t,
          se_med_coercion (ιc t) (t ⇒ t)
 | Se_Med_Ref  : forall t1 t2 c1 c2,
-    se_coercion c1 (t1 ⇒ t2) ->
-    se_coercion c2 (t2 ⇒ t1) ->
+    se_coercion c1 (t2 ⇒ t1) ->
+    se_coercion c2 (t1 ⇒ t2) ->
     se_med_coercion (c1 #c c2) (Ref t1 ⇒ Ref t2)
-| Se_Med_Arr : forall t1 t2 t3 t4 c1 c2,
-    se_coercion c1 (t1 ⇒ t2) ->
-    se_coercion c2 (t3 ⇒ t4) ->
-    se_med_coercion (c1 →c c2) (t2 → t3 ⇒ t1 → t4). 
+| Se_Med_Arr : forall t1 t2 g1 g2 c1 c2,
+    se_coercion c1 (g1 ⇒ t1) ->
+    se_coercion c2 (t2 ⇒ g2) ->
+    se_med_coercion (c1 →c c2) (t1 → t2 ⇒ g1 → g2). 
 
 
 
@@ -116,10 +109,10 @@ Fixpoint crcn_depth (c : coercion) : nat :=
   | Seq_c c1 c2 => max (crcn_depth c1) (crcn_depth c2)
   | c1 →c c2 => 1 + max (crcn_depth c1) (crcn_depth c2)
   | c1 #c c2 => 1 + max (crcn_depth c1) (crcn_depth c2)
-  | Prj_c t _ => [| t |]
-  | Inj_c t => [| t |]
-  | ιc t => [| t |]
-  | ⊥c _ => 1
+  | Prj_c t _ => (ty_depth t)
+  | Inj_c t =>  (ty_depth t) 
+  | ιc t => (ty_depth t)
+  | Fail_c t1 _ t2 => max (ty_depth t1) (ty_depth t2)
   end. 
 
 Instance crcn_deep : Deep crcn := crcn_depth. 
@@ -179,8 +172,17 @@ Program Fixpoint mk_coercion t1 t2 l {measure ((ty_depth t1) + (ty_depth t2))}
       (mk_coercion t21 t11 l) →c (mk_coercion t12 t22 l)
     | (Ref t1), (Ref t2) =>
       (mk_coercion t1 t2 l) #c (mk_coercion t2 t1 l)
-    | _, _ => (⊥c l)
+    | _, _ => (Fail_c t1 l t2)
     end.
+
+(* Library worthy *)
+Ltac cut_if_not_hypothesis h :=
+  match goal with
+  |  H: h |- _ => fail 1
+  | _ => cut h
+  end. 
+
+
 
 Ltac tc_mk_coercion :=
   intuition;
@@ -218,11 +220,11 @@ Inductive make_coercion : (ty * ty * blame_info) -> coercion -> Prop :=
     make_coercion (t2, t4, l) c2 ->
     make_coercion ((t1 → t2), (t3 → t4), l) (c1 →c c2)
 | Mk_Ref : forall t1 t2 l c1 c2,
-    make_coercion (t1, t2, l) c1 ->
-    make_coercion (t2, t1, l) c2 ->
+    make_coercion (t2, t1, l) c1 ->
+    make_coercion (t1, t2, l) c2 ->
     make_coercion (Ref t1, Ref t2, l) (Ref_c c1 c2)
 | Mk_Fail_c : forall t1 t2 l,
-    t1 <≁> t2 -> make_coercion (t1, t2, l) (Fail_c l).
+    t1 <≁> t2 -> make_coercion (t1, t2, l) (Fail_c t1 l t2).
 
 Hint Constructors make_coercion.
 
@@ -294,16 +296,17 @@ Ltac le_gives_eq_tac m n :=
 
 
 Ltac omega_max :=
-  solve [repeat match goal with
-                | _ => rewrite Max.max_0_l in *
-                | _ => rewrite Max.max_0_r in *
-                | _ => rewrite Max.max_idempotent in *
-                | _ => omega
-                | |- context[max ?m ?n] => spec_max_with_guard m n
-                | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
-                | |- context[match ?t with _ => _ end] => destruct t
-                end].
-Ltac ineq_tac := unfold depth in *; simpl in *; omega_max.
+  repeat match goal with
+         | _ => rewrite Max.max_0_l in *
+         | _ => rewrite Max.max_0_r in *
+         | _ => rewrite Max.max_idempotent in *
+         | _ => solve[eauto]
+         | _ => omega
+         | |- context[Init.Nat.max ?m ?n] => idtac "1" m n; spec_max_with_guard m n
+         | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
+         | |- context[match ?t with _ => _ end] => destruct t
+         end.
+Ltac ineq_tac := solve[omega_max] || unfold depth in *; cbn in *; omega_max.
 
 
 
@@ -372,11 +375,11 @@ Inductive make_se_coercion
     make_se_coercion (t1 → t2, t3 → t4, l) (c1 →c c2)
 | Mk_Se_Ref : forall t1 t2 l c1 c2,
     Ref t1 <> Ref t2 -> 
-    make_se_coercion (t1, t2, l) c1 ->
-    make_se_coercion (t2, t1, l) c2 ->
+    make_se_coercion (t2, t1, l) c1 ->
+    make_se_coercion (t1, t2, l) c2 ->
     make_se_coercion (Ref t1, Ref t2, l) (Ref_c c1 c2)
 | Mk_Se_Fail : forall t1 t2 l,
-    t1 <≁> t2 -> make_se_coercion (t1, t2, l) (Fail_c l) .
+    t1 <≁> t2 -> make_se_coercion (t1, t2, l) (Fail_c t1 l t2) .
 
 Hint Constructors make_se_coercion. 
 
@@ -398,19 +401,14 @@ Proof. induction t; intros; cbn; repeat rewrite beq_ty_true; auto. Qed. Qed.
 Lemma make_se_coercion_wt : forall c t1 t2 l,
     make_se_coercion (t1, t2, l) c -> se_coercion c (t1 ⇒ t2). 
 Proof.     
-  induction c; intros t1 t2 l' H; inverts keep H;
+  induction c; intros t1 t2 l' H; inverts H;
     repeat match goal with
            | IH: context [ make_se_coercion _ ?c -> _ ],
                  H: make_se_coercion _ ?c |- _ =>
              apply IH in H
            end;
-    eauto.
-  econstructor. congruence.
-  eauto. 
-  econstructor. congruence.
-  eauto. 
-  econstructor. intro. subst. contradiction H1. auto.
-  eauto.
+    try solve[econstructor; try congruence; eauto]. 
+  - econstructor. intro. subst. contradiction H1. auto. eauto.
 Qed. 
 
 Lemma make_se_coercion_symmetry : forall c1 t1 t2 l,
@@ -433,22 +431,26 @@ Lemma make_se_coercion_total : forall t1 t2 l,
 Proof.
   induction t1; destruct t2; intros;
     repeat match goal with
-           | |- context[make_coercion (?t, ?g, _) _] =>
-             let H:=fresh in
-             assert (t <≁> g); [solve[intros H; inverts H]| eauto] 
+           | |- context[make_se_coercion (?t, ?g, _) _] =>
+             match goal with 
+             | H: t <≁> g |- _ => fail 1
+             | _ => 
+               let H:=fresh in
+               assert (t <≁> g); [solve[intros H; inverts H]| eauto] 
+             end
            | _ =>
              let f := fresh in
              solve[eexists;
                    split;
                    [econstructor; intro f; (discriminate || inverts f) | ineq_tac]]
-           | _ => eauto
-           end;
-    match goal with
-    | |- exists c, make_se_coercion (?t1 , ?t2, _) _ /\ _ =>
-      let e:=fresh in
-      destruct (ty_eqdec t1 t2) as [e|e]; [inverts e| idtac]
-    end;
-    eauto.
+           | _ => solve [eauto] 
+           end.
+  all: match goal with
+       | |- exists c, make_se_coercion (?t1 , ?t2, _) _ /\ _ =>
+         let e:=fresh in
+         destruct (ty_eqdec t1 t2) as [e|e]; [inverts e| idtac]
+       end.
+  all: eauto. 
   all: repeat match goal with
               | t:ty, l:blame_info, IH: context[make_se_coercion (?g, _, _) _] |- _ =>
                 match goal with
@@ -461,9 +463,9 @@ Proof.
                 destruct (IH t l) as [c [P1 P2]];
                   destruct (make_se_coercion_symmetry _ _ _ _ P1) as [x []]
                 end
-              | _ => solve[eexists; split; [eauto | ineq_tac]]
+              | _ => solve[eexists; split; ineq_tac]
               end.
-Qed. 
+  Qed. 
 
 Lemma make_se_function' : forall n c1 c2 t1 t2 l,
     [|t1|] <= n ->
@@ -544,7 +546,7 @@ Inductive compose_coercions : coercion * coercion -> coercion -> Prop :=
 | Comp_Other : forall c1 c2,
     compose_coercions (c1, c2) (Seq_c c1 c2)
 | Comp_Fail_c    : forall t g l,
-    t <≁> g -> compose_coercions (Inj_c t, Prj_c g l) (Fail_c l).
+    t <≁> g -> compose_coercions (Inj_c t, Prj_c g l) (Fail_c t l g).
 
 Hint Constructors compose_coercions.
 
