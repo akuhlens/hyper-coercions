@@ -1,16 +1,16 @@
-
 Require Import Coq.Init.Datatypes.
+
 Require Import LibTactics. 
 Require Import GTypes.
 Require Import coercions. 
 Require Import Omega. 
+Require Import omega_max. 
 
-
-Inductive base : Ty -> Prop :=
+Inductive base : ty -> Prop :=
 | Base_Int : base Int
 | Base_Bool : base Bool. 
 
-Inductive composite : Ty -> Prop :=
+Inductive composite : ty -> Prop :=
 | Composite_Arr {t1 t2} : composite (t1 → t2)
 | Composite_Ref {t1}    : composite (Ref t1). 
 
@@ -28,21 +28,21 @@ Theorem hc_p_eqdec :
     {x = y} + {x <> y}.
 Proof. decide_equality. Defined.
 
-Inductive hc_i : Type :=
+Inductive hc_i :=
 | inj_mt : hc_i
 | inj    : hc_i.
 
 Theorem hc_i_eqdec : forall x y : hc_i, {x = y} + {x <> y}.
 Proof. decide_equality. Defined.
 
-Inductive hc : Type := 
-| HC   : hc_p -> hc_m -> hc_i -> hc
-| Fail : hc_p -> Ty -> blame_info -> hc
+Inductive hc := 
+| HC   : hc_p -> ty -> hc_m -> ty ->  hc_i -> hc
+| Fail : hc_p -> ty -> blame_info -> ty -> hc
 with
-hc_m : Type :=
-| Id_hc : Ty -> hc_m
-| Arr_hc : Ty -> Ty -> Ty -> Ty -> hc -> hc  -> hc_m
-| Ref_hc : Ty -> Ty -> hc -> hc -> hc_m.
+hc_m :=
+| Id_hc : hc_m
+| Arr_hc : hc -> hc  -> hc_m
+| Ref_hc : hc -> hc -> hc_m.
 
 Scheme hc_ind_mut :=
   Induction for hc Sort Prop
@@ -54,55 +54,51 @@ Proof. decide_equality. Defined.
 
 Hint Constructors hc hc_m hc_i hc_p. 
 
-Inductive hc_p_wt : hc_p -> CTy -> Prop :=
+Inductive hc_p_wt : hc_p -> cty -> Prop :=
 | prj_mt_wt {t} : hc_p_wt prj_mt (t ⇒ t)
 | prj_wt   {t l}: t <> Dyn -> hc_p_wt (prj l) (Dyn ⇒ t).
 
-Inductive hc_i_wt : hc_i  -> CTy -> Prop :=
+Inductive hc_i_wt : hc_i  -> cty -> Prop :=
 | inj_mt_wt {t} : hc_i_wt inj_mt (t ⇒ t)
 | inj_c_wt {t}  : t <> Dyn -> hc_i_wt inj (t ⇒ Dyn).
 
 
 Fixpoint hc_depth h :=
   match h with
-  | HC p m i => hc_m_depth m
-  | Fail p t i => ty_depth t
+  | HC p t1 m t2 i => max (max (ty_depth t1) (ty_depth t2)) (hc_m_depth m)
+  | Fail p t1 l t2 => max (ty_depth t1) (ty_depth t2)
   end
 with
 hc_m_depth m :=
   match m with
-  | Id_hc t => ty_depth t
-  | Arr_hc t1 t2 c1 c2 => 1 + max (hc_depth c1) (hc_depth c2)
-  | Ref_hc t1 t2 c1 c2 => 1 + max (hc_depth c1) (hc_depth c2)
+  | Id_hc => 0
+  | Arr_hc c1 c2 => 1 + max (hc_depth c1) (hc_depth c2)
+  | Ref_hc c1 c2 => 1 + max (hc_depth c1) (hc_depth c2)
   end.
 
 
 
-Inductive hc_wt : hc -> CTy -> Prop := 
+Inductive hc_wt : hc -> cty -> Prop := 
 | hc_wt_HC : forall t1 t2 t3 t4 p m i,
     hc_p_wt p (t1 ⇒ t2) ->
     hc_m_wt m (t2 ⇒ t3) ->
     hc_i_wt i (t3 ⇒ t4) ->
-    hc_wt (HC p m i) (t1 ⇒ t4)
-| fail_wt : forall t1 t2 t3 p l,
-    hc_p_wt p (CArr t1 t2) ->
-    hc_wt (Fail p t2 l) (t1 ⇒ t3)
+    hc_wt (HC p t2 m t3 i) (t1 ⇒ t4)
+| fail_wt : forall t1 t2 t3 t4 p l,
+    t2 <> Dyn -> 
+    hc_p_wt p (t1 ⇒ t2) ->
+    hc_wt (Fail p t2 l t3) (t1 ⇒ t4)
 with
-hc_m_wt : hc_m -> CTy -> Prop :=
-| Id_wt {t} : hc_m_wt (Id_hc t) (t ⇒ t)
-(* | Id_Dyn_wt : hc_m_wt (Id_hc Dyn) (Dyn ⇒ Dyn)
-   | Id_base_wt  {t} :
-    base t ->
-    hc_m_wt (Id_hc t) (t ⇒ t) *)
+hc_m_wt : hc_m -> cty -> Prop :=
+| Id_wt {t} : hc_m_wt Id_hc (t ⇒ t)
 | Fn_hc_s_wt {t1 t2 t3 t4 c1 c2} :
     hc_wt c1 (t3 ⇒ t1) ->
     hc_wt c2 (t2 ⇒ t4) ->
-    hc_m_wt (Arr_hc t1 t2 t3 t4 c1 c2)
-            ((t1 → t2) ⇒ (t3 → t4))
+    hc_m_wt (Arr_hc c1 c2) ((t1 → t2) ⇒ (t3 → t4))
 | Ref_hc_s_wt {t1 t2 c1 c2} :
-    hc_wt c1 (t1 ⇒ t2) ->
-    hc_wt c2 (t2 ⇒ t1) ->
-    hc_m_wt (Ref_hc t1 t2 c1 c2) ((Ref t1) ⇒ (Ref t2)).
+    hc_wt c1 (t2 ⇒ t1) ->
+    hc_wt c2 (t1 ⇒ t2) ->
+    hc_m_wt (Ref_hc c1 c2) ((Ref t1) ⇒ (Ref t2)).
 
 Scheme hc_wt_ind_mut  := Induction for hc   Sort Prop
   with hcm_wt_ind_mut := Induction for hc_m Sort Prop.
@@ -110,34 +106,23 @@ Scheme hc_wt_ind_mut  := Induction for hc   Sort Prop
 Hint Constructors hc_i_wt hc_p_wt hc_m_wt hc_wt. 
 
 Inductive hc_contains_hc : hc -> hc -> Prop :=
-| Contains_Sub {p m i h} :
+| Contains_Sub {p m i h t1 t2} :
     hc_m_sub_hc m h -> 
-    hc_contains_hc (HC p m i) h
-| Contains_Trans {p m i h h'} : 
+    hc_contains_hc (HC p t1 m t2 i) h
+| Contains_Trans {p m i h h' t1 t2} : 
     hc_m_sub_hc m h' ->
     hc_contains_hc h' h ->
-    hc_contains_hc (HC p m i) h
+    hc_contains_hc (HC p t1 m t2 i) h
 with
 hc_m_sub_hc : hc_m -> hc -> Prop :=
-| Contains_Arr_h1 {t1 t2 t3 t4 h1 h2}:
-    hc_m_sub_hc (Arr_hc t1 t2 t3 t4 h1 h2) h1
-| Contains_Arr_h2 {t1 t2 t3 t4 h1 h2}:
-    hc_m_sub_hc (Arr_hc t1 t2 t3 t4 h1 h2) h2
-| Contains_Ref_h1 {t1 t2 h1 h2}:
-    hc_m_sub_hc (Ref_hc t1 t2 h1 h2) h1
-| Contains_Ref_h2 {t1 t2 h1 h2}:
-    hc_m_sub_hc (Ref_hc t1 t2 h1 h2) h2.
-
-(*
-Inductive hc_contains_ty : hc -> Ty -> Prop :=
-| Contains_Id {p i t} :
-    hc_contains_ty (HC p (Id_hc t) i) t
-| Contains_Fail {p t i}:
-    hc_contains_ty (Fail p t i) t
-| Contains_Sub {p m i h t} :
-    hc_m_contains_hc m h ->
-    hc_contains_ty h t ->
-    hc_contains_ty (HC p m i) t. *)
+| Contains_Arr_h1 {h1 h2}:
+    hc_m_sub_hc (Arr_hc h1 h2) h1
+| Contains_Arr_h2 {h1 h2}:
+    hc_m_sub_hc (Arr_hc h1 h2) h2
+| Contains_Ref_h1 {h1 h2}:
+    hc_m_sub_hc (Ref_hc h1 h2) h1
+| Contains_Ref_h2 {h1 h2}:
+    hc_m_sub_hc (Ref_hc h1 h2) h2.
 
 Hint Constructors hc_contains_hc hc_m_sub_hc.
 
@@ -147,109 +132,178 @@ Ltac rule_out_absurd_hc_contains :=
          | H: _ = _ |- _ => inverts H
          end;
   repeat match goal with
-         | H: hc_contains_hc (Fail _ _ _) _ |- _ => inverts H
+         | H: hc_contains_hc (Fail _ _ _ _) _ |- _ => inverts H
          | H: hc_contains_hc (HC _ (Id_hc _) _) _ |- _ => inverts H
-         | H: hc_m_sub_hc (Id_hc _) _  |- _ => inverts H
+         | H: hc_m_sub_hc Id_hc _  |- _ => inverts H
          | _ => solve [simpl; auto]
          end].
 
-Lemma hc_contains_trans : forall h h' h'',
-    hc_contains_hc h h' -> hc_contains_hc h' h'' -> hc_contains_hc h h''.
+Lemma hc_size_lt_contained_hc : forall h,
+    (forall h', hc_contains_hc h h' -> hc_depth h' < hc_depth h).
 Proof.
-  intro h.
+  intro h. 
   elim h using hc_ind_mut with
-  (P := fun h => forall h' h'',
-            hc_contains_hc h h' -> hc_contains_hc h' h'' -> hc_contains_hc h h'')
-  (P0 := fun m => forall p i h' h'',
-   hc_contains_hc (HC p m i) h' -> hc_contains_hc h' h'' ->
-   hc_contains_hc (HC p m i) h'');
-    intuition; try rule_out_absurd_hc_contains;
-      try solve
-          [match goal with
-           | H: hc_contains_hc _ _ |- _ =>
-             inverts H;
-             solve [
-                 match goal with
-                 | H: hc_m_sub_hc _ _ |- _ => inverts H
-                 end;
-                 eauto
-               ]
-           end].
+    (P := fun h => forall h',
+              hc_contains_hc h h' -> hc_depth h' < hc_depth h)
+    (P0 := fun m => forall h h',
+               hc_m_sub_hc m h ->
+               hc_contains_hc h h' -> hc_depth h' < hc_depth h).
+  all: intuition. 
+  all: try rule_out_absurd_hc_contains.
+  all:
+    try 
+      solve
+      [match goal with
+       | H: hc_m_sub_hc _ _ |- _ => inverts keep H
+       end;
+       match goal with
+       | H: hc_contains_hc _ _ , IH: context[_ < _ ] |- ?g =>
+         solve [ apply IH; exact H]
+       end]. 
+  all: 
+    match goal with
+    | H: hc_contains_hc _ _ |- _ => inverts H
+    end;
+    match goal with
+    | H: hc_m_sub_hc _ _ |- _ => inverts H
+    end;
+    try match goal with
+        | H: hc_contains_hc ?h _ ,
+             IH: context[hc_m_sub_hc _ _ -> hc_contains_hc _ _ -> _]
+          |- _ =>
+          apply IH in H
+        end;
+    simpl in *; ineq_tac. 
 Qed.
 
-Inductive mk_hc : Ty * Ty * blame_info -> hc -> Prop :=
+
+Lemma hc_depth_lt_contained_hc : forall h h',
+    hc_contains_hc h h' -> hc_depth h' < hc_depth h.
+Proof.
+  intro h. 
+  elim h using hc_ind_mut with
+    (P := fun h => forall h',
+              hc_contains_hc h h' -> hc_depth h' < hc_depth h)
+    (P0 := fun m =>
+             forall h h',
+               hc_m_sub_hc m h ->
+               hc_contains_hc h h' ->
+               hc_depth h' < hc_depth h);
+     (* forall h, hc_m_sub_hc m h -> hc_depth h < hc_m_depth m *)
+  intuition;
+  try rule_out_absurd_hc_contains.
+  (* This attempt has to go before the other *)
+  all: match goal with
+            | H: hc_contains_hc _ _ |- _ => inverts H
+            end. 
+  all: match goal with
+       | H: hc_m_sub_hc _ _ |- _ => inverts keep H
+       end.
+  all: repeat match goal with
+              | IH: context[_ -> _ -> _], 
+                    H1: hc_m_sub_hc _ _,
+                        H2: hc_contains_hc _ _
+                |- _ => apply (IH _ _ H1) in H2
+              | _ => solve[simpl in *; auto] 
+              end.
+  all: repeat match goal with
+              | H: hc_m_sub_hc _ _ |- _ => inverts H
+              end;
+    match goal with
+    | IH: _ -> _ |- _ => apply IH; eauto
+    end. 
+Qed.
+
+Hint Resolve hc_depth_lt_contained_hc. 
+
+Lemma hc_contains_hc_depth_help : forall n h1 h2,
+    hc_depth h1 < S n -> hc_contains_hc h1 h2 -> hc_depth h2 < n.
+Proof. intuition. apply hc_depth_lt_contained_hc in H0. omega. Qed.
+
+Ltac contains_tac :=
+  match goal with
+    | H: hc_depth ?h1 < S ?n |- hc_depth ?h2 < ?n =>
+      apply (hc_contains_hc_depth_help n h1 h2);
+      [solve [eauto] | solve [eauto] | idtac ..]
+  end.
+
+Lemma hc_contains_trans' : forall n h1 h2 h3,
+    hc_depth h1 < n -> 
+    hc_contains_hc h1 h2 -> hc_contains_hc h2 h3 -> hc_contains_hc h1 h3.
+Proof.
+  induction n; intuition; inverts H0; inverts H1; eauto. 
+  all: repeat match goal with
+              | H: hc_m_sub_hc _ _ |- _ => inverts H
+              end.
+  all: match goal with
+       | H: hc_contains_hc ?h1 ?h2 |- hc_contains_hc _ ?h3 =>
+         apply (IHn h1 h2 h3) in H; 
+           [solve [eauto] 
+           | contains_tac 
+           | eauto | idtac ..]
+       end.
+Qed.
+
+Lemma hc_contains_trans : forall h1 h2 h3,
+    hc_contains_hc h1 h2 -> hc_contains_hc h2 h3 -> hc_contains_hc h1 h3.
+Proof. 
+  introv H1 H2. 
+  eapply (hc_contains_trans' (1 + (hc_depth h1)));
+    eauto. 
+Qed. 
+
+
+
+
+
+Inductive mk_hc : ty * ty * blame_info -> hc -> Prop :=
 | Mk_hc_id {l t} :
-    mk_hc (t, t, l) (HC prj_mt (Id_hc t) inj_mt)
+    mk_hc (t, t, l) (HC prj_mt t Id_hc t inj_mt)
 | Mk_hc_dyn_l {t l} :
-    t <> Dyn -> mk_hc (Dyn, t, l) (HC (prj l) (Id_hc t) inj_mt)
+    t <> Dyn -> mk_hc (Dyn, t, l) (HC (prj l) t Id_hc t inj_mt)
 | Mk_hc_dyn_r {t l} :
-    t <> Dyn -> mk_hc (t, Dyn, l) (HC prj_mt (Id_hc t) inj)
+    t <> Dyn -> mk_hc (t, Dyn, l) (HC prj_mt t Id_hc t inj)
 | Mk_hc_arr {t1 t2 t3 t4 l c1 c2} :
     t1 → t2 <> t3 → t4 -> 
     mk_hc (t3, t1, l) c1 -> mk_hc (t2, t4, l) c2 ->
     mk_hc (t1 → t2, t3 → t4, l)
-          (HC prj_mt (Arr_hc t1 t2 t3 t4 c1 c2) inj_mt)
+          (HC prj_mt (t1 → t2) (Arr_hc c1 c2) (t3 → t4) inj_mt)
 | Mk_hc_ref {t1 t2 l c1 c2} :
     Ref t1 <> Ref t2 -> 
-    mk_hc (t1, t2, l) c1 ->
-    mk_hc (t2, t1, l) c2 ->
+    mk_hc (t2, t1, l) c1 ->
+    mk_hc (t1, t2, l) c2 ->
     mk_hc (Ref t1, Ref t2, l)
-          (HC prj_mt (Ref_hc t1 t2 c1 c2) inj_mt)
+          (HC prj_mt (Ref t1) (Ref_hc c1 c2) (Ref t2) inj_mt)
 (* need to define compatability this includes (t1 -> t2) *) 
 | Mk_hc_fail {t g l} :
-    t <≁> g -> mk_hc (t, g, l) (Fail prj_mt t l).
+    t # g -> mk_hc (t, g, l) (Fail prj_mt t l g).
 
 Hint Constructors mk_hc. 
 
-Lemma mk_hc_wt : forall t1 t2 l h,
+Lemma mk_hc_wt' : forall n t1 t2 l h,
+    hc_depth h < n ->
     mk_hc (t1, t2, l) h -> hc_wt h (t1 ⇒ t2).
 Proof.
-  intros t1 t2 l h; gen t1 t2 l.
-  Check hc_ind_mut.
-  elim h using hc_ind_mut with
-  (P := fun h => forall t1 t2 l,
-            mk_hc (t1, t2, l) h ->
-            hc_wt h (t1 ⇒ t2))
-  (P0 := fun m => 
-           match m with
-           | (Id_hc i) => True
-           | (Arr_hc _ _ _ _ h1 h2) =>
-             (forall t1 t2 l,
-                 mk_hc (t1, t2, l) h1 ->
-                 hc_wt h1 (t1 ⇒ t2)) /\
-             (forall t1 t2 l,
-                 mk_hc (t1, t2, l) h2 ->
-                 hc_wt h2 (t1 ⇒ t2))
-           | (Ref_hc _ _ h1 h2) =>
-             (forall t1 t2 l,
-                 mk_hc (t1, t2, l) h1 ->
-                 hc_wt h1 (t1 ⇒ t2)) /\
-             (forall t1 t2 l,
-                 mk_hc (t1, t2, l) h2 ->
-                 hc_wt h2 (t1 ⇒ t2))
-           end).
-  + intros p m IH i t1 t2 l H; destruct m;
-      (* Invert and original mk_hc's *)
-      repeat match goal with
-             | H: Dyn <> Dyn |- _ => contradiction H; reflexivity
-             | H: mk_hc _ (HC _ _ _) |- _ => inverts H
-             end;
-      (* Use sub mk_hc's to derive IH's *)
-      repeat match goal with
-             | |- _ /\ _ => split 
-             | IH: _ /\ _ |- _ => destruct IH
-             | IH: context[mk_hc _ ?h -> _],
-                   H: mk_hc _ ?h
-               |-  _
-               => apply IH in H
-             | _ => eauto
-             end. 
-  + intros _1 _2 _3 _4 _5 _6 H. inverts H; auto.
-  + trivial.
-  + auto.
-  + auto. 
+  induction n; intuition. 
+  inverts H0; auto.  
+  - eapply IHn in H6; eapply IHn in H7. eauto. 
+    contains_tac. 
+    contains_tac. 
+    contains_tac. 
+  - eapply IHn in H6; eapply IHn in H7. eauto. 
+    contains_tac. 
+    contains_tac. 
+    contains_tac. 
+  - eauto. 
+    assert (t1 <> Dyn). 
+    intuition. subst.  contradiction H5. eauto. 
+    auto. 
 Qed. 
 
+Lemma mk_hc_wt : forall t1 t2 l h,
+    mk_hc (t1, t2, l) h -> hc_wt h (t1 ⇒ t2).
+Proof. intuition. eapply (mk_hc_wt' (1 + hc_depth h)); eauto. Qed. 
+ 
 Hint Resolve mk_hc_wt. 
 
 Lemma inconsistent_symetric : forall t1 t2, t1 ≁ t2 -> t2 ≁ t1. 
@@ -260,256 +314,64 @@ Hint Resolve inconsistent_symetric.
 Ltac prove_inconsistent :=
   match goal with
   | |- _ ≁ _ => solve [intro h; inversion h]
-  | |- _ <≁> _ => solve [intro h; inversion h]
+  | |- _ # _ => solve [intro h; inversion h]
   | |- _ ∼ _ => constructor
   end.
 
-Fixpoint hc_depth h :=
-  match h with
-  | HC _ m _ => hc_m_depth m
-  | Fail _ t _ => 1
-  end
-with
-hc_m_depth m :=
-  match m with
-  | Id_hc t => ty_depth t
-  | Arr_hc t1 t2 t3 t4 h1 h2 =>
-    1 + max (max (hc_depth h1) (max (ty_depth t3) (ty_depth t1)))
-            (max (hc_depth h2) (max (ty_depth t2) (ty_depth t4)))
-  | Ref_hc t1 t2 h1 h2 =>
-    1 + max (max (hc_depth h1) (hc_depth h2)) (max (ty_depth t1) (ty_depth t2))
-  end. 
-
-Lemma one_le_ty_depth : forall t, 1 <= ty_depth t. 
-Proof. induction t; simpl; auto. Qed.
-
-Lemma one_le_hc_depth : forall h, 1 <= hc_depth h.
-Proof. destruct h as [p [] i | p [] l]; simpl; auto using one_le_ty_depth. Qed. 
-
-Lemma one_le_hc_m_depth: forall h, 1 <= hc_m_depth h.
-Proof. destruct h; simpl; auto using one_le_hc_depth, one_le_ty_depth. Qed.
-
-Hint Resolve one_le_hc_depth one_le_hc_m_depth one_le_ty_depth. 
-
-Lemma max_spec_eq_r : forall n m, max n m = n -> m <= n.
+Lemma mk_hc_symetry' : forall n h t1 t2 l,
+    hc_depth h < n -> 
+    mk_hc (t1, t2, l) h -> 
+    exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h'.
 Proof.
-  intros n m H. destruct (Max.max_spec n m); omega. 
+  induction n;  intuition.
+  inverts H0; eauto. 
+  - eapply IHn in H6 as [H6 []]; eapply IHn in H7 as [H7 []];
+    try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+    contains_tac. 
+  - eapply IHn in H6 as [H6 []]; eapply IHn in H7 as [H7 []];
+    try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+    contains_tac. 
+  - try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+    contains_tac. 
 Qed. 
 
-Lemma max_spec_eq_l : forall n m, max n m = m -> n <= m.
-Proof. 
-  intros n m H. destruct (Max.max_spec n m); try omega.
-Qed.
-
-Hint Resolve max_spec_eq_r max_spec_eq_l. 
-
-Ltac omega_max_search depth :=
-  match depth with
-  | 0 =>  fail
-  | S ?n => 
-    try match goal with
-        | |- context[max ?t1 ?t2] =>
-          let e:=fresh in
-          destruct (Max.max_dec t1 t2) as [e|e];
-          rewrite e in *;
-          [ apply max_spec_eq_r in e |
-            apply max_spec_eq_l in e ];
-          omega_max_search n
-        | |- match ?t with _ => _ end =>
-          destruct t; omega_max_search n
-        end
-
-  end.
-
-Ltac max_dec_tac_context := 
-  (* this match leads to exponential blowup :( *) 
-  repeat match goal with
-         | H: context[max ?t1 ?t2] |- _ =>
-           let e:=fresh in
-           destruct (Max.max_dec t1 t2) as [e|e];
-           rewrite e in *;
-           [ apply max_spec_eq_r in e |
-             apply max_spec_eq_l in e ]
-         end.
-
-Ltac expose_depth_min_tac :=
-  repeat match goal with
-         | t: Ty |- _ => 
-           match goal with
-           | H: 1 <= ty_depth t |- _ => fail 1
-           | _ => cut (1 <= ty_depth t); [ intro | solve [apply one_le_ty_depth] | auto ..]
-           end
-         | h: hc |- _ => 
-           match goal with
-           | H: 1 <= hc_depth h |- _ => fail 1
-           | _ => cut (1 <= hc_depth h); [ intro | solve [apply one_le_hc_depth] | auto ..]
-           end
-         | h: hc_m |- _ => 
-           match goal with
-           | H: 1 <= hc_m_depth h |- _ => fail 1
-           | _ => cut (1 <= hc_m_depth h); [ intro | solve [apply one_le_hc_m_depth] | auto ..]
-           end
-         end.
-
-Ltac omega_max :=
-  simpl in *;
-  expose_depth_min_tac;
-  repeat
-    match goal with
-    | e: _ = _ |- _ => rewrite e
-    end;
-  max_dec_tac_context; 
-  omega_max_search 5;
-  max_dec_tac_context; 
-  omega. 
-  
-
-
-
 Lemma mk_hc_symetry : forall h t1 t2 l,
-    mk_hc (t1, t2, l) h -> exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h'.
-Proof.
-  intros h. 
-  elim h using hc_ind_mut with
-  (P := fun h => forall t1 t2 l,
-            mk_hc (t1, t2, l) h ->
-            exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h')
-  (P0 := fun m => 
-   match m with
-   | (Id_hc i) => True
-   | (Arr_hc _ _ _ _ h1 h2) =>
-     (forall t1 t2 l,
-         mk_hc (t1, t2, l) h1 ->
-         exists h', mk_hc (t2, t1, l) h' /\ hc_depth h1 = hc_depth h') /\
-     (forall t1 t2 l,
-         mk_hc (t1, t2, l) h2 ->
-         exists h', mk_hc (t2, t1, l) h'  /\ hc_depth h2 = hc_depth h')
-   | (Ref_hc _ _ h1 h2) =>
-     (forall t1 t2 l,
-         mk_hc (t1, t2, l) h1 ->
-         exists h', mk_hc (t2, t1, l) h'  /\ hc_depth h1 = hc_depth h') /\
-     (forall t1 t2 l,
-         mk_hc (t1, t2, l) h2 ->
-         exists h', mk_hc (t2, t1, l) h'  /\ hc_depth h2 = hc_depth h')
-   end).
-  - intros p m P i t1 t2 l H.
-    destruct m; inverts H;
-      repeat match goal with
-             | |- _ /\ _ => split
-             | H: exists h, _ |- _ =>
-               let h:=fresh in destruct H as [h []]
-             | IH: _ /\ _ |- _ => destruct IH
-             | IH: (forall t1 t2 l, _ -> _),
-                   H: mk_hc _ ?h |-  _
-               => apply IH in H
-             | _ => intuition (eauto; omega)
-             | _ => solve [eexists; split; [> eauto | omega_max]]
-             end.
-  - intros p t b t1 t2 l H. inversion H.
-    eexists. split. constructor. intro contra.
-    inversion contra; subst;  auto. subst. 
-    auto. 
-  - trivial.
-  - auto.
-  - auto.
-Qed.
+    mk_hc (t1, t2, l) h -> 
+    exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h'.
+Proof. intuition. eapply (mk_hc_symetry' (S (hc_depth h))); eauto. Qed. 
 
 Hint Resolve mk_hc_symetry.
 
-
-Fixpoint ty_size t :=
-  match t with
-  | t1 → t2 => 1 + (ty_size t1 + ty_size t2)
-  | Ref t   => 1 + (ty_size t)
-  | _ => 1
-  end.
-
-Fixpoint hc_size h :=
-  match h with
-  | HC _ m _ => 1 + hc_m_size m
-  | Fail _ t _ => 1 + ty_size t
-  end
-with
-hc_m_size m :=
-  match m with
-  | Id_hc t => ty_size t
-  | Arr_hc t1 t2 t3 t4 h1 h2 =>
-    ty_size t1 + ty_size t2 + ty_size t3 + ty_size t4 + hc_size h1 + hc_size h2
-  | (Ref_hc t1 t2 h1 h2) =>
-    ty_size t1 + ty_size t2 + hc_size h1 + hc_size h2
-  end. 
-
-Ltac reveal_minimum_sizes :=
-  match goal with
-  | t: Ty |- _ => 
-    match goal with
-    | H: 1 <= ty_size t |- _ => fail 1
-    | _ => cut (1 <= ty_size t); [ intro | auto ..]
-    end
-  | h : hc |- _ =>
-    match goal with
-    | H: 2 <= hc_size h |- _ => fail 1
-    | _ => cut (2 <= hc_size h); [ intro | auto ..]
-    end
-  | m : hc_m |- _ =>
-    match goal with
-    | H: 1 <= hc_m_size m |- _ => fail 1
-    | _ =>  cut (1 <= hc_m_size m); [ intro | auto ..]
-    end
-  | ty : hc_m |- _ =>
-    match goal with
-    | H: 1 <= ty_depth ty |- _ => fail
-    | _ =>  cut (1 <= ty_depth ty); [ intro | auto ..]
-    end
-  end.
-
-
-
-Lemma one_le_ty_size : forall t, 1 <= ty_size t. 
-Proof. induction t; simpl; auto. Qed. 
-
-Hint Resolve one_le_ty_size.
-
-Lemma two_le_hc_size : forall h, 2 <= hc_size h.
-Proof.
-  intros [p [] i | p t l]; reveal_minimum_sizes; simpl in *; omega. 
-Qed. 
-
-Hint Resolve two_le_hc_size. 
-
-Lemma one_le_hc_m_size : forall m, 1 <= hc_m_size m.
-Proof.
-  intros []; intros; reveal_minimum_sizes; simpl; omega. 
-Qed. 
-
-Hint Resolve one_le_hc_m_size.
-
-
-
 Lemma mk_hc_function' : forall n h h' t1 t2 l,
-    ty_depth t1 + ty_depth t2 <= n -> 
+    ty_depth t1 < n ->
+    ty_depth t2 < n -> 
     mk_hc (t1, t2, l) h ->
     mk_hc (t1, t2, l) h' ->
     h = h'.
-Proof. induction n.
-       - intros h h' [] [] l mk1 mk2; simpl in *; omega.  
-       - intros h h' [] [] l bound mk1 mk2;
-         match goal with
-         | H1: mk_hc _ _, H2: mk_hc _ _ |- _ => inverts H1; inverts H2
-         end;
-         try match goal with
+Proof. induction n; intuition. 
+       all: match goal with
+            | H1: mk_hc _ _, H2: mk_hc _ _ |- _ => inverts H1; inverts H2
+            end.
+       all: try match goal with
              | H: _ <> _  |- _ => solve[contradiction H; auto]
-             | H: _ <≁> _ |- _ => solve[contradiction H; auto]
+             | H: _ # _ |- _ => solve[contradiction H; auto]
              | H: _ = _ |- _ => discriminate
              | _ => auto
-             end;
-         repeat match goal with 
-                | IH: context[mk_hc _ _ -> mk_hc _ _ -> _ = _],
-                      H1: mk_hc (?t1, ?t2, _) ?c1,
-                          H2: mk_hc (?t1, ?t2, _) ?c2 |- _ =>
-                  apply (IH c1 c2) in H1; [subst | solve [omega_max] | solve [auto] | idtac ..]
-                | _ => auto
-                end.
+             end.
+       all: 
+         repeat 
+           match goal with 
+           | IH: context[mk_hc _ _ -> mk_hc _ _ -> _ = _],
+                 H1: mk_hc (?t1, ?t2, _) ?c1,
+                     H2: mk_hc (?t1, ?t2, _) ?c2 |- _ =>
+             apply (IH c1 c2) in H1; 
+               [subst 
+               | solve [ineq_tac] 
+               | solve [ineq_tac] 
+               | solve [auto] 
+               | idtac ..]
+           | _ => solve [auto]
+           end.
 Qed. 
 
 Lemma mk_hc_function : forall h1 h2 t1 t2 l,
@@ -517,7 +379,7 @@ Lemma mk_hc_function : forall h1 h2 t1 t2 l,
     mk_hc (t1, t2, l) h2 ->
     h1 = h2.
 Proof. intros h1 h2 t1 t2 l.
-       apply (mk_hc_function' ((ty_depth t1) + (ty_depth t2))).
+       apply (mk_hc_function' (1 + (ty_depth t1) + (ty_depth t2)));
        omega. 
 Qed.
 
@@ -527,17 +389,20 @@ Require Import Coq.Program.Tactics.
 Require Import Coq.Program.Wf.
 
 Program Fixpoint mk_hcf t1 t2 l {measure ((ty_depth t1) + (ty_depth t2))} : hc :=
-  if (beq_ty t1 t2) then (HC prj_mt (Id_hc t1) inj_mt) else
+  if (beq_ty t1 t2) then (HC prj_mt t1 Id_hc t2 inj_mt) else
     match t1, t2 with
-    | Dyn, t2  => (HC (prj l) (Id_hc t1) inj_mt)
-    | t1 , Dyn => (HC prj_mt (Id_hc t1) inj)
+    | Dyn, t2  => (HC (prj l) t2 Id_hc t2 inj_mt)
+    | t1 , Dyn => (HC prj_mt t1 Id_hc t1 inj)
     | (t11 → t12), (t21 → t22) =>
-      (HC prj_mt
-          (Arr_hc t11 t12 t21 t22
-                  (mk_hcf t21 t11 l)
+      (HC prj_mt (t11 → t12)
+          (Arr_hc (mk_hcf t21 t11 l)
                   (mk_hcf t12 t22 l))
-          inj_mt)
-    | _, _ => (Fail prj_mt t1 l)
+          (t21 → t22) inj_mt)
+    | (Ref t1), Ref t2 =>
+      (HC prj_mt (Ref t1)
+          (Ref_hc (mk_hcf t2 t1 l) (mk_hcf t1 t2 l))
+          (Ref t2) inj_mt)
+    | _, _ => (Fail prj_mt t1 l t2)
     end.
 
 Solve All Obligations with tc_mk_coercion. 
@@ -546,12 +411,13 @@ Notation "[ t => l => g ]" := (mk_hcf t g l) (at level 70).
 Lemma mk_hc_total : forall t1 t2 l,
     exists h, mk_hc (t1, t2, l) h /\ hc_depth h <= max (ty_depth t1) (ty_depth t2). 
 Proof.
-  induction t1; destruct t2; intros;
+  induction t1; destruct t2; intros.
     (* apply IH when possible *)
+  all:
     repeat
       match goal with
       | IH: (forall t l, exists h, mk_hc (?g, t, l) h /\ _),
-            T: Ty,
+            T: ty,
                L: blame_info |- _ =>
         match goal with
         | H: mk_hc (g, T, L) _ |- _ => fail 1
@@ -565,38 +431,54 @@ Proof.
           | H: exists x, _ |- _ => destruct H
           | H: _ /\ _ |- _ => destruct H
           end
+      end.
+  all: (* References and Functions need symmetry too *)
+  try match goal with
+      | H: mk_hc (?t1, ?t2, _) _ |- context[mk_hc(Ref ?t1, Ref ?t2, _) _] =>
+        destruct (mk_hc_symetry _ _ _ _ H)
+      | H: mk_hc (?t1, ?t2, _) _ |- context[mk_hc(?t1 → _, ?t2 → _, _) _] =>
+        destruct (mk_hc_symetry _ _ _ _ H)
       end;
-    (* References and Functions need symmetry too *)
-    try match goal with
-        | H: mk_hc (?t1, ?t2, _) _ |- context[mk_hc(Ref ?t1, Ref ?t2, _) _] =>
-          destruct (mk_hc_symetry _ _ _ _ H)
-        | H: mk_hc (?t1, ?t2, _) _ |- context[mk_hc(?t1 → _, ?t2 → _, _) _] =>
-          destruct (mk_hc_symetry _ _ _ _ H)
-        end;
     repeat
       match goal with
       | H: exists x, _ |- _ => destruct H
       | H: _ /\ _ |- _ => destruct H
-      end;
+      end.
   (* case on whether the types are the same *)
-  match goal with
-  | |- context[mk_hc (?t1, ?t2, _) _] =>
-    let H:=fresh in
-    destruct (ty_eqdec t1 t2) as [H | H];
-      [ try discriminate; inverts H |
-        try solve [contradiction H; eauto] ]
-  end;
+  all: 
+    match goal with
+    | |- context[mk_hc (?t1, ?t2, _) _] =>
+      let H1:=fresh in
+      let H2:=fresh in
+      destruct (ty_eqdec t1 t2) as [H2 | H2];
+        [ try discriminate; inverts H2 |
+          try solve [contradiction H2; eauto] ]
+          
+    end.
+  all: 
+    match goal with
+    | |- context[mk_hc (?t1, ?t2, _) _] =>
+      let H1:=fresh in
+      destruct (ty_shallow_consistency_dec t1 t2) as [H1 | H1];
+        [ try discriminate; inverts H1 |
+          try solve [contradiction H1; eauto] ]
+    end.
+
+
   (* solve by deriving proofs of existance and inequalities *)
-  try solve [eexists; split;
-             [econstructor; try eassumption; try prove_inconsistent; eauto
-             | omega_max]].
+  
+  all: 
+    try 
+      solve [eexists; split; 
+             [solve[try (constructor; discriminate); eauto]
+             | simpl in *; omega_max]].
 Qed. 
 
 
 Lemma mk_hc_not_dyn : forall t1 t2 l,
     t1 <> Dyn -> t2 <> Dyn ->
-    (exists m, mk_hc (t1, t2, l) (HC prj_mt m inj_mt)) \/ 
-    (mk_hc (t1, t2, l) (Fail prj_mt t1 l)).
+    (exists m, mk_hc (t1, t2, l) (HC prj_mt t1 m t2 inj_mt)) \/ 
+    (mk_hc (t1, t2, l) (Fail prj_mt t1 l t2)).
 Proof.
   intros t1 t2 l H1 H2. destruct (mk_hc_total t1 t2 l) as [h [mk_h bound]]. 
   inverts mk_h; eauto.
@@ -605,198 +487,27 @@ Qed.
 Hint Resolve mk_hc_not_dyn.
 
 Lemma mk_hc_not_dyn_sconsist : forall t1 t2 l,
-    t1 <> Dyn -> t2 <> Dyn -> t1 <∼> t2 ->
-    (exists m, mk_hc (t1, t2, l) (HC prj_mt m inj_mt)). 
+    t1 <> Dyn -> t2 <> Dyn -> t1 !# t2 ->
+    (exists m, mk_hc (t1, t2, l) (HC prj_mt t1 m t2 inj_mt)). 
 Proof. intros t1 t2 l H1 H2 H3;
          destruct (mk_hc_not_dyn t1 t2 l H1 H2);
          inverts H3;
          repeat match goal with
                 | H: _ <> _ |- _ => solve [contradiction H; reflexivity]
-                | H: _ <≁> _ |- _ => solve [contradiction H; eauto]
-                | H: mk_hc _ (Fail _ _ _) |- _ => inverts H
+                | H: _ # _ |- _ => solve [contradiction H; eauto]
+                | H: mk_hc _ (Fail _ _ _ _) |- _ => inverts H
                 | _ => eauto
                 end.
 Qed. 
 
 Lemma mk_hc_not_dyn_sinconsist : forall t1 t2 l,
-    t1 <> Dyn -> t2 <> Dyn -> t1 <≁> t2 -> mk_hc (t1, t2, l) (Fail prj_mt t1 l).
+    t1 <> Dyn -> t2 <> Dyn -> t1 # t2 -> mk_hc (t1, t2, l) (Fail prj_mt t1 l t2).
 Proof.
  intros t1 t2 l H1 H2 H3;
  destruct (mk_hc_not_dyn t1 t2 l H1 H2); eauto. 
 Qed. 
 
 Hint Resolve mk_hc_not_dyn_sinconsist mk_hc_not_dyn_sconsist.
-
-Inductive mediating_ty : hc_m -> CTy -> Prop:=
-| Med_Ty_Id {t} : mediating_ty (Id_hc t) (t ⇒ t)
-| Med_Ty_Arr {t1 t2 t3 t4 h1 h2} :
-    mediating_ty (Arr_hc t1 t2 t3 t4 h1 h2)
-                 (t1 → t2 ⇒ t3 → t4)
-| Med_Ty_Ref {t1 t2 h1 h2} :
-    mediating_ty (Ref_hc t1 t2 h1 h2) (Ref t1 ⇒ Ref t2).
-
-(* Inductive mk_hc' : Ty * Ty * hc_p -> hc -> Prop :=
-| mk_hc_cast {t1 t2 l m} : mk_hc (t1, t2, l) m -> mk_hc' (t1, t2, prj l) m
-| mk_hc_id {t p} : mk_hc' (t, t, p) (HC prj_mt (Id_hc t) inj_mt). *)
-
-Hint Constructors mediating_ty. 
-
-Lemma mediating_ty_total : forall m, exists t1 t2, mediating_ty m (t1 ⇒ t2).
-Proof. intros [];  eauto. Qed. 
-
-Definition from_ty m :=
-  match m with
-  | Id_hc t => t
-  | Arr_hc t1 t2 _ _ _ _ => t1 → t2
-  | Ref_hc t1 _ _ _ => Ref t1
-  end.
-
-Definition to_ty m : Ty :=
-  match m with
-  | Id_hc t => t
-  | Arr_hc _ _ t g _ _ => t → g
-  | Ref_hc _ t _ _ => Ref t
-  end.
-
-Fixpoint C n (h1 h2 : hc) : option hc :=
-  match n with
-  | 0 => None
-  | S n' =>
-    let Cm :=
-        (fun m1 m2 =>
-           match m1, m2 with
-           | Id_hc _, _ => Some m2
-           | _, Id_hc _ => Some m1
-           | (Arr_hc t1 t2 _ _ c1 c2), (Arr_hc _ _ t3 t4 c3 c4) =>
-             match C n' c3 c1, C n' c2 c4 with
-             | None, _ => None
-             | _, None => None
-             | Some (HC _ (Id_hc t1) _), Some (HC _ (Id_hc t2) _) =>
-               Some (Id_hc (t1 → t2))
-             | Some c1, Some c2   => Some (Arr_hc t1 t2 t3 t4 c1 c2)
-             end
-           | (Ref_hc t1 _ c1 c2), (Ref_hc _ t2 c3 c4) =>
-             match C n' c1 c3, C n' c4 c2 with
-             | None, _ => None
-             | _, None => None
-             | Some (HC _ (Id_hc _) _), Some (HC _ (Id_hc _) _) =>
-               Some (Id_hc (Ref t1))
-             | Some c1, Some c2   => Some (Ref_hc t1 t2 c1 c2)
-             end
-           | _, _ => None
-           end)
-    in
-    match h1 , h2 with
-    | HC _ (Id_hc Dyn) _, h2 => Some h2
-    | HC p m i, HC _ (Id_hc Dyn) _ => Some h1
-    | HC p m1 inj_mt, HC prj_mt m2 i =>
-      match Cm m1 m2 with
-      | Some m3 => Some (HC p m3 i)
-      | _ => None
-      end
-    (* hc_depth+n   Fail _ t _ = 1
-       hc_depth+1   HC _ m _   = 1 + hcm_depth m
-       hc_depth+0   HC _ m _   = 0 + hcm_depth m
-       hc_m_depth (Id t)  = ty_depth t1
-       hc_m_depth (Arr t1 t2 c1 c2) = 1 + max (hc_depth c1) (hc_depth c2)
-       hc_m_depth (Ref t1 t2 c1 c2) = 1 + max (hc_depth c1) (hc_depth c2)
-       ty_depth   (t1 -> t2) = 1 + max (ty_depth t1) (ty_depth t2)
-       ty_depth   (Ref t1)   = 1 + (ty_depth t1)
-       ty_depth   _          = 1
-       make_hc   : (t1 * t2 * l) -> h 
-       make_hc_size_with : (
-           make_hc (t1, t2, l) = h ->
-           hc_depth+1 h <= 2 * max (ty_depth t1) (ty_depth t2) \/
-           hc_depth+0 h <= max (ty_depth t1) (ty_depth t2) 
-       (C) = Compose : (h1 * h2) -> h3
-       Compose_size : 
-           Compose (h1, h2) = h3 ->
-           max (hc_depth+n h) (hc_depth+n h) = n ->
-           hc_depth+n h3 <= max (hc_depth+n h) (hc_depth+n h) *)
-    | HC p m1 inj, HC (prj l) m2 i =>
-      match [ to_ty m1 => l => from_ty m2 ] with
-      | HC _ m3 _  =>
-        match Cm m1 m3 with
-        | Some m4 =>
-          match Cm m4 m2 with
-          | Some m5 => Some (HC p m5 i)
-          | None => None
-          end
-        | None => None 
-        end
-      | Fail _ t1 l => Some (Fail p t1 l)
-      end
-    | Fail _ _ _ , _ => Some h2
-    | HC p m inj, Fail (prj l1) t2 l2 =>
-      match [ to_ty m => l1 => t2 ] with
-      | HC _ _ _   => Some (Fail p (from_ty m) l2)
-      | Fail _ t l1 => Some (Fail p (from_ty m) l1)
-      end
-    | HC p m _, Fail _ t2 l => Some (Fail p (from_ty m) l)
-    | _ , _ => None
-    end
-  end.
-
-Theorem compose_total_wt : forall n h1 h2 t1 t2 t3,
-        hc_depth h1 < n -> 
-        hc_depth h2 < n -> 
-        hc_wt h1 (t1 ⇒ t2) ->
-        hc_wt h2 (t2 ⇒ t3) -> 
-        exists h3, ((C n h1 h2) = Some h3) /\
-        (hc_wt h3 (t1 ⇒ t3)) /\
-        (((hc_depth h3 <= hc_depth h1) /\ hc_depth h2 <= (hc_depth h1)) \/
-         ((hc_depth h3 <= hc_depth h2) /\ hc_depth h1 <= (hc_depth h2))).
-Proof.
-  induction n. 
-  - intros.
-    match goal with
-    | H: _ < 0 |- _ => inverts H
-    end.
-  - intros. 
-    inverts H1; inverts H2. 
-    all:repeat
-      match goal with
-      | H: hc_m_wt _ _ |- _ => inverts H
-            | H: hc_p_wt _ _ |- _ => inverts H
-      | H: hc_i_wt _ _ |- _ => inverts H
-      end.
-    all:repeat match goal with
-                 | |- contex[
-        | |- context[match ?t with _ => _ end] =>
-          match type of t with
-          | Ty => destruct t
-          end
-        end. 
-    all: try solve
-             [eexists;
-              split;
-              [solve [reflexivity | eauto] |
-               split;
-               [eauto | eauto || (left; omega) || (right; omega)]]]. 
-    destruct t3.
-    
-    eauto.
-    eauto. 
-    split. 
-    eauto. 
-    (exists h3,
-        C n h1 h2 = Some h3
-        /\
-        (wt_hc h3 (t1 ⇒ t3))
-        /\
-        ((hc_depth h3 <= (hc_depth h1))
-         \/
-         (hc_depth h3 <= (hc_depth h2)))).
-                     
-                                
-
-with 
-where "n # m" := (comp n m).
-    
-   mk_hc (t2, t3, l) (HC prj_mt m3 inj_mt) ->
-   compose_hc_m (m1, m3) m4 ->
-   compose_hc_m (m4, m2) m5 ->
-   compose_hc (HC p1 m1 inj, HC (prj l) m2 i2) (HC p1 m5 i2)
 
 Inductive compose_hc : (hc * hc) -> hc -> Prop :=
 |Comp_hc_Dyn_L {p i h}:
@@ -806,74 +517,62 @@ Inductive compose_hc : (hc * hc) -> hc -> Prop :=
         inj of the rhs coercion
       - in short the second hyper-coercion may be a failure but 
         doesn't overlap with any of the failure cases for compose *)
-   compose_hc (HC p (Id_hc Dyn) i, h) h
-|Comp_hc_Dyn_R {p1 m1 i1 p2 i2}:
+   compose_hc (HC p Dyn Id_hc Dyn i, h) h
+|Comp_hc_Dyn_R {p1 m1 t1 t2 p2 i2}:
    (* specified as HC so that Comp_hc_fail_L doesn't apply *)
-   compose_hc (HC p1 m1 i1, HC i2 (Id_hc Dyn) p2) (HC p1 m1 i1)
-|Comp_hc_no_prj {p1 m1 m2 i2 m3}:
+   compose_hc (HC p1 t1 m1 t2 inj, HC p2 Dyn Id_hc Dyn i2)
+              (HC p1 t1 m1 t2 inj)
+|Comp_hc_no_prj {p1 m1 m2 i2 m3 t11 t22 t}:
    compose_hc_m (m1, m2) m3 ->
-   compose_hc (HC p1 m1 inj_mt, HC prj_mt m2 i2) (HC p1 m3 i2)
+   compose_hc (HC p1 t11 m1 t inj_mt, HC prj_mt t m2 t22 i2)
+              (HC p1 t11 m3 t22 i2)
 |Comp_hc_inj_prj_ok {p1 m1 l m2 i2 t1 t2 t3 t4 m3 m4 m5}:
-   mediating_ty m1 (t1 ⇒ t2) ->
-   mediating_ty m2 (t3 ⇒ t4) ->
    t2 <> Dyn ->
    t3 <> Dyn ->
-   mk_hc (t2, t3, l) (HC prj_mt m3 inj_mt) ->
+   mk_hc (t2, t3, l) (HC prj_mt t2 m3 t3 inj_mt) ->
    compose_hc_m (m1, m3) m4 ->
    compose_hc_m (m4, m2) m5 ->
-   compose_hc (HC p1 m1 inj, HC (prj l) m2 i2) (HC p1 m5 i2)
+   compose_hc (HC p1 t1 m1 t2 inj, HC (prj l) t3 m2 t4 i2)
+              (HC p1 t1 m5 t4 i2)
 |Comp_hc_inj_prj_fail {p1 m1 l m2 i2 t2 t3 t1 t4}:
-   mediating_ty m1 (t1 ⇒ t2) ->
-   mediating_ty m2 (t3 ⇒ t4) ->
    t2 <> Dyn ->
    t3 <> Dyn ->
-   mk_hc (t2, t3, l) (Fail prj_mt t2 l) ->
-   compose_hc (HC p1 m1 inj, HC (prj l) m2 i2) (Fail p1 t1 l)
-(* |Comp_hc_fail  {p1 m1 l m2 i2 t1 t2 t3 t4} :
-   mediating_ty m1 (t1 ⇒ t2) ->
-   mediating_ty m2 (t3 ⇒ t4) ->
-   t2 <> Dyn -> t3 <> Dyn ->
-   mk_hc (t2, t3, l) (Fail prj_mt t2 l) ->
-   compose_hc (HC p1 m1 inj, HC (prj l) m2 i2) (Fail p1 t1 l) *)
-|Comp_hc_fail_L {p t l h}:
+   mk_hc (t2, t3, l) (Fail prj_mt t2 l t3) ->
+   compose_hc (HC p1 t1 m1 t2 inj, HC (prj l) t3 m2 t4 i2)
+              (Fail p1 t1 l t4)
+|Comp_hc_fail_L1 {p1 t1 l t2 p2 t3 m2 t4 i2}:
    (* doesn't overlap with Comp_hc_Dyn_R *)
-   compose_hc (Fail p t l, h) (Fail p t l)
-|Comp_hc_fail_no_prj {p1 m1 l2 t1 t2}:
+   compose_hc (Fail p1 t1 l t2, HC p2 t3 m2 t4 i2) (Fail p1 t1 l t4)
+|Comp_hc_fail_L2 {p1 t1 t2 p2 t3 t4 l1 l2}:
+   compose_hc (Fail p1 t1 l1 t2, Fail p2 t3 l2 t4) (Fail p1 t1 l1 t4)
+|Comp_hc_fail_no_prj {p1 m1 l2 t1 t2 t4}:
    (* doesn't overlap with Comp_hc_Dyn_L because t2 cannot be
       Dyn according to the typing rules and
       there isn't a m1 that would type t1 at Dyn *)
-   mediating_ty m1 (t1 ⇒ t2) ->
-   compose_hc (HC p1 m1 inj_mt, Fail prj_mt t2 l2) (Fail p1 t1 l2)
-|Comp_hc_fail_inj_prj_ok {p1 m1 l1 t3 l2 t1 t2 m3}:
+   compose_hc (HC p1 t1 m1 t2 inj_mt, Fail prj_mt t2 l2 t4) (Fail p1 t1 l2 t4)
+|Comp_hc_fail_inj_prj_ok {p1 m1 l1 t3 l2 t1 t2 m3 t4}:
    (* Don't have to consider inj_mt dyn because that is covered
       via Comp_hc_Dyn_L *)
-   mediating_ty m1 (t1 ⇒ t2) ->
-   mk_hc (t2, t3, l1) (HC prj_mt m3 inj_mt) ->
-   compose_hc (HC p1 m1 inj, Fail (prj l1) t3 l2) (Fail p1 t1 l2)
-|Comp_hc_fail_inj_prj_fail {p1 m1 l1 t3 l2 t1 t2}:
+   mk_hc (t2, t3, l1) (HC prj_mt t2 m3 t3 inj_mt) ->
+   compose_hc (HC p1 t1 m1 t2 inj, Fail (prj l1) t3 l2 t4) (Fail p1 t1 l2 t4)
+|Comp_hc_fail_inj_prj_fail {p1 m1 l1 t3 l2 t1 t2 t4}:
    (* Don't have to consider inj_mt dyn because that is covered
       via Comp_hc_Dyn_L *)
-   mediating_ty m1 (t1 ⇒ t2) ->
-   mk_hc (t2, t3, l1) (Fail prj_mt t2 l1) ->
-   compose_hc (HC p1 m1 inj, Fail (prj l1) t3 l2) (Fail p1 t1 l1)              
+   mk_hc (t2, t3, l1) (Fail prj_mt t2 l1 t3) ->
+   compose_hc (HC p1 t1 m1 t2 inj, Fail (prj l1) t3 l2 t4) (Fail p1 t1 l1 t4)              
 with
 (* assuming m1 : t1 => t2 and m2 : t2 => t3 *)
 compose_hc_m : (hc_m * hc_m) -> hc_m -> Prop :=
-| compose_hc_id_L {t1 m} : compose_hc_m (Id_hc t1, m) m
-| compose_hc_id_R {t1 m} : compose_hc_m (m, Id_hc t1) m
-| compose_Arr {t11 t12 t21 t22 t31 t32 h1 h2 h3 h4 h5 h6}:
+| compose_hc_id_L {m} : compose_hc_m (Id_hc, m) m
+| compose_hc_id_R {m} : compose_hc_m (m, Id_hc) m
+| compose_Arr {h1 h2 h3 h4 h5 h6}:
     compose_hc (h3, h1) h5 ->
     compose_hc (h2, h4) h6 -> 
-    compose_hc_m (Arr_hc t11 t12 t21 t22 h1 h2,
-                  Arr_hc t21 t22 t31 t32 h3 h4)
-                 (Arr_hc t11 t12 t31 t32 h5 h6)
-| compose_Ref {t1 t2 t3 h1 h2 h3 h4 h5 h6} :
-    (* Todo Check that this is correct *)
-    compose_hc (h1, h3) h5 ->
-    compose_hc (h4, h2) h6 ->
-    compose_hc_m (Ref_hc t1 t2 h1 h2,
-                  Ref_hc t2 t3 h3 h4)
-                 (Ref_hc t1 t3 h5 h6). 
+    compose_hc_m (Arr_hc h1 h2, Arr_hc h3 h4) (Arr_hc h5 h6)
+| compose_Ref {h1 h2 h3 h4 h5 h6} :
+    compose_hc (h3, h1) h5 ->
+    compose_hc (h2, h4) h6 ->
+    compose_hc_m (Ref_hc h1 h2, Ref_hc h3 h4) (Ref_hc h5 h6). 
 
 Hint Constructors compose_hc compose_hc_m. 
 
@@ -883,123 +582,12 @@ Ltac dupH H :=
   assert (H' : P); try exact H. 
 
 
-Lemma mk_hc_id : forall t l, mk_hc (t, t, l) (HC prj_mt (Id_hc t) inj_mt).
+Lemma mk_hc_id : forall t l, mk_hc (t, t, l) (HC prj_mt t Id_hc t inj_mt).
 Proof. intros [] l; auto. Qed. 
 
-(*
-Lemma mk_hc_id_size : forall t l p m i,
-    mk_hc (t, t, l) (HC p m i) -> hc_size (HC p m i)  = ty_size t. 
-Proof. intros. cut (mk_hc (t, t, l) (HC prj_mt (Id_hc t) inj_mt)); [intros | idtac ..].
-       Check mk_hc_function. apply mk_hc_function enough (H : mk_hc_id t l) by auto. . nverts H; repeat reveal_minimum_sizes; try (simpl; omega).  
-       inverts H. (mk_hc_id t l).  intros t l h H. inverts H; reveal_minimum_sizes; simpl; try omega.
-       inverts H. eauto. 
-       auto. auto. omega. simpl in *.
-*)
-
- 
-
-
-(* Lemma hc_m_contains_trans : forall m m' m'' p p' i i',
-    hc_m_contains_hc m  (HC p m' i) ->
-    hc_m_contains_hc m' (HC p' m'' i') ->
-    hc_m_contains_hc m  (HC p' m'' i'). 
-Proof.
-  intro m.
-  elim m using hcm_ind_mut with
-  (P := fun (h : hc) => 
-            match h with
-            | (HC _ m _ ) =>
-              forall m' m'' p p' i i',
-              hc_m_contains_hc m  (HC p m' i) ->
-              hc_m_contains_hc m' (HC p' m'' i') ->
-              hc_m_contains_hc m  (HC p' m'' i')
-            | (Fail _ _ _) => True
-            end)
-    (P0 := fun m => forall m' m'' p p' i i',
-       hc_m_contains_hc m  (HC p m' i) ->
-       hc_m_contains_hc m' (HC p' m'' i') ->
-       hc_m_contains_hc m  (HC p' m'' i'));
-  intuition; auto. 
-  - inverts H.
-  - destruct h; destruct h0.
-    inverts keep H1; auto.
-     -- inverts keep H10. eauto. 
-    -- inverts keep H10. eauto. 
-    --  inversion H1; subst.
-    * auto.
-    * inversion H10. eauto.
-    * inversion H10.
-    -- inversion H1; subst; auto. 
-    * inversion H10.  
-    * inversion H10. eauto.
-      -- inverts H1; inverts H10.
-  - destruct h; destruct h0.
-    inverts keep H1; auto. 
-     -- inverts keep H8. eauto. 
-    -- inverts keep H8. eauto. 
-    --  inverts keep H1; try inversion H8; eauto.  
-    -- inversion H1; subst; auto; inverts keep H8; eauto. 
-    -- inversion H1; subst; auto; inverts keep H8; eauto. 
-Qed. 
-*)
-
-Lemma hc_contains_self_containment : forall h,
-    not (hc_contains_hc h h) /\
-    forall p m i, h = (HC p m i) -> not (hc_m_sub_hc m h).
-Proof.
-  intros h.
-  elim h using hc_ind_mut with
-  (P := fun h =>
-          not (hc_contains_hc h h) /\
-          forall p m i, h = (HC p m i) -> not (hc_m_sub_hc m h))
-  (P0 := fun m => 
-    match m with
-    | (Id_hc i) => True
-    | (Arr_hc _ _ _ _ h1 h2) =>
-      (not (hc_contains_hc h1 h1) /\
-       forall p m i, h1 = (HC p m i) -> not (hc_m_sub_hc m h1))
-      /\
-      (not (hc_contains_hc h2 h2) /\
-       forall p m i, h2 = (HC p m i) -> not (hc_m_sub_hc m h2))
-    | (Ref_hc _ _ h1 h2) =>
-            (not (hc_contains_hc h1 h1) /\
-       forall p m i, h1 = (HC p m i) -> not (hc_m_sub_hc m h1))
-      /\
-      (not (hc_contains_hc h2 h2) /\
-       forall p m i, h2 = (HC p m i) -> not (hc_m_sub_hc m h2))
-    end);
-  intuition;
-  repeat match goal with
-    | H: match ?t with _ => _ end |- _ => destruct t
-    | H: _ /\ _ |- _ => destruct H
-  end;
-  try rule_out_absurd_hc_contains;
-  match goal with
-  | H: hc_contains_hc _ _ |- _ => inverts H
-  | H: HC _ _ _ = HC _ _ _ |- _ => inverts H
-  end;
-  match goal with
-  | H: hc_m_sub_hc _ _ |- _ => inverts H
-  end; 
-  try match goal with
-  | H: hc_contains_hc ?t _, H': hc_contains_hc ?t ?t -> _ |- _ =>
-    solve[apply H'; apply (hc_contains_trans _ _ _ H); auto]
-  | H: ?t = HC ?p ?m ?i, IH: context[?t = HC _ _ _ -> _ -> False] |- _ =>
-    solve [apply IH in H; [ assumption | auto ]]
-      end.
-Qed. 
-
-Lemma hc_not_cyclic : forall h, not (hc_contains_hc h h).
-Proof. intros h. destruct (hc_contains_self_containment h). auto. Qed.
-
-Lemma hcm_not_cyclic : forall m p i, not (hc_m_sub_hc m (HC p m i)).
-Proof. intros m p i. destruct (hc_contains_self_containment (HC p m i)). auto. Qed.
-
-Hint Resolve hc_not_cyclic hcm_not_cyclic. 
-
-Lemma hc_m_le_hc_depth : forall p m i,
-     hc_m_depth m <= hc_depth (HC p m i). 
-Proof. intros p m i. simpl. auto. Qed.
+Lemma hc_m_le_hc_depth : forall p m i t1 t2,
+     hc_m_depth m <= hc_depth (HC p t1 m t2 i). 
+Proof. intros p m i t1 t2. simpl. auto. Qed.
 
 Hint Resolve hc_m_le_hc_depth. 
 
@@ -1029,116 +617,4 @@ Qed.
 
 Hint Resolve max_n_m_eq_n_le max_n_m_eq_m_le.
 
-Ltac solve_inequality :=
-    try match goal with
-        | H: hc_m_sub_hc _ _ |- _ => inverts keep H
-        | H: hc_contains_hc _ _ |- _ => inverts keep H
-    end;
-    try match goal with
-    | H: hc_contains_hc _ ?h |- _ < _ => inversion H
-    end;
-    try match goal with
-        | H: _ = _ |- _ => inverts keep H
-        end;
-    try match goal with
-        | H: hc_m_sub_hc _ _ |- _ < _ => inverts keep H
-        end;                            
-    repeat match goal with
-      | H: hc_contains_hc _ _ , IH: context[hc_size _ < hc_size _]
-        |- _ =>
-        apply IH in H; [> idtac | solve [eauto] | idtac ..]
-      | H: HC _ _ _ = ?h, IH: context[?h = HC _ _ _] |- hc_size ?h' < _ => 
-        symmetry in H;            
-        apply (IH _ _ _ h') in H; [> idtac | solve [eauto] | idtac ..] 
-    end;
-    simpl in *; try omega. 
-
-
-
-Lemma hc_size_lt_contained_hc : forall h,
-    (forall h', hc_contains_hc h h' -> hc_size h' < hc_size h).
-Proof.
-  intro h. 
-  elim h using hc_ind_mut with
-    (P := fun h => forall h',
-              hc_contains_hc h h' -> hc_size h' < hc_size h)
-    (P0 := fun m => forall h h',
-               hc_m_sub_hc m h ->
-               hc_contains_hc h h' -> hc_size h' < hc_size h);
-  intuition;
-  try rule_out_absurd_hc_contains;
-  solve [match goal with
-         | H: hc_contains_hc _ _ |- _ => inverts H
-         end;
-         match goal with
-         | H: hc_m_sub_hc _ _ |- _ => inverts H
-         end;
-         match goal with
-         | H: hc_contains_hc ?h _ ,
-              IH: context[hc_m_sub_hc _ _ -> hc_contains_hc _ _ -> _]
-           |- _ =>
-           apply IH in H; [> simpl in *; omega | solve [eauto] | idtac ..]
-         | _ => solve [simpl in *; omega; solve[auto]]
-         end]
-  ||
-  solve
-    [match goal with
-     | H: hc_m_sub_hc _ _ |- _ => inverts keep H
-     end;
-     match goal with
-     | H: hc_contains_hc _ _ , IH: context[_ < _ ] |- ?g =>
-       solve [ apply IH; exact H]
-     end].
-Qed.
-
-Lemma hc_depth_lt_contained_hc : forall h,
-    (forall h', hc_contains_hc h h' -> hc_depth h' < hc_depth h).
-Proof.
-  intro h. 
-  elim h using hc_ind_mut with
-    (P := fun h => forall h',
-              hc_contains_hc h h' -> hc_depth h' < hc_depth h)
-    (P0 := fun m => forall h h',
-               hc_m_sub_hc m h ->
-               hc_contains_hc h h' -> hc_depth h' < hc_depth h);
-  intuition;
-  try rule_out_absurd_hc_contains;
-  (* This attempt has to go before the other *)
-  try solve
-      [match goal with
-       | H: hc_m_sub_hc _ _ |- _ => inverts keep H
-       end;
-       match goal with
-       | H: hc_contains_hc _ _ , IH: context[_ < _ ] |- ?g =>
-         solve [ apply IH; exact H]
-       end];
-  (* because the rest of this will diverge *)
-  try
-    match goal with
-    | H: hc_contains_hc _ _ |- _ => inverts H
-    end;
-  match goal with
-    | H: hc_m_sub_hc _ _ |- _ => inverts H
-  end;
-  match goal with
-  | H: hc_contains_hc ?h _ ,
-       IH: context[hc_m_sub_hc _ _ -> hc_contains_hc _ _ -> _]
-    |- _ =>
-    apply IH in H; [> omega_max | solve [eauto] | idtac ..]
-  | _ => solve [omega_max; solve[auto]]
-  end. 
-Qed.
-
-
-(* Lemma hc_mk_m_depth : forall n h t1 t2 l,
-    hc_size h <= n -> 
-    mk_hc (t1, t2, l) h ->
-    hc_size h <= (ty_size t1) + (ty_size t2). 
-Proof. induction n;
-       intros h t1 t2 l bound H;
-       cut ( 1 <= ty_size t1); 
-       cut ( 1 <= ty_size t2);
-       intros; eauto. 
-       + inverts H; inverts bound. 
- *)
 

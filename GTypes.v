@@ -18,16 +18,16 @@ Fixpoint ty_depth t : nat :=
   match t with
   | t → g => 1 + max (ty_depth t) (ty_depth g)
   | Ref t  => 1 + ty_depth t
-  | _ => 1
+  | _ => 0
   end.
 
 Open Scope depth_scope. 
 Instance ty_deep : Deep ty := ty_depth.
 
-Lemma ty_depth_le_0 : forall (t:ty), [| t |] <= 0 -> False. 
+Lemma ty_depth_lt_0 : forall (t:ty), [| t |] < 0 -> False. 
 Proof. unfold depth. intros [] H; inverts H. Qed.
 
-Hint Resolve ty_depth_le_0.
+Hint Resolve ty_depth_lt_0.
   
 Fixpoint beq_ty (x y : ty) : bool :=
   match x, y with
@@ -42,8 +42,8 @@ Fixpoint beq_ty (x y : ty) : bool :=
 Inductive Static (x : ty) : Prop :=
 | NotDyn : x <> Dyn -> Static x.
 
-Inductive Cty :=
-| CArr : ty -> ty -> Cty.
+Inductive cty :=
+| CArr : ty -> ty -> cty.
 
 Notation "x ⇒ y" := (CArr x y) (at level 70, right associativity).
 
@@ -63,19 +63,18 @@ Definition inconsistent x y := consistent x y -> False.
 Notation "x ∼ y" := (consistent x y) (at level 70, no associativity). 
 Notation "x ≁ y" := (x ∼ y -> False) (at level 70, no associativity).
 
+(* shallow consistency *)
+Reserved Notation "x !# y" (at level 70, no associativity). 
 Inductive shallow_consistent : ty -> ty -> Prop :=
-| Shallow_Consistent_Dyn_L {t} : shallow_consistent Dyn t
-| Shallow_Consistent_Dyn_R {t} : shallow_consistent t Dyn
-| Shallow_Consistent_Eq {t} : shallow_consistent t t
-| Shallow_Consistent_Arr {t1 t2 t3 t4} : shallow_consistent (t1 → t2) (t3 → t4)
-| Shallow_Consistent_Ref {t1 t2} : shallow_consistent (Ref t1) (Ref t2).
+| Shallow_Consistent_Dyn_L {t} : Dyn !# t 
+| Shallow_Consistent_Dyn_R {t} : t   !# Dyn
+| Shallow_Consistent_Eq {t}    : t   !# t
+| Shallow_Consistent_Arr {t1 t2 t3 t4} : (t1 → t2) !# (t3 → t4)
+| Shallow_Consistent_Ref {t1 t2} :       (Ref t1)  !# (Ref t2)
+where "x !# y" := (shallow_consistent x y).
 
 Hint Constructors shallow_consistent. 
-
-Definition shallow_inconsistent x y := consistent x y -> False. 
-Notation "x <∼> y" := (shallow_consistent x y) (at level 70, no associativity). 
-Notation "x <≁> y" := (x <∼> y -> False) (at level 70, no associativity).
-
+Notation "x # y" := (x !# y -> False) (at level 70, no associativity). 
 
 Theorem ty_eqdec :
   forall x y : ty,
@@ -181,7 +180,7 @@ Proof.
 Qed. 
 
 Theorem ty_shallow_consistency_dec :
-  forall x y : ty, {x <∼> y} + {x <≁> y}.
+  forall x y : ty, {x !# y} + {x # y}.
 Proof.
   induction x; destruct y;
     repeat
@@ -193,7 +192,7 @@ Proof.
   end.
 Qed. 
 
-Lemma shallow_inconsistency_strengthening : forall x y, x <≁> y -> x ≁ y.  
+Lemma shallow_inconsistency_strengthening : forall x y, x # y -> x ≁ y.  
 Proof. induction x; intros []; intros; inversion H1; auto. Qed.
 
 Hint Resolve shallow_inconsistency_strengthening. 
@@ -205,12 +204,11 @@ Qed.
 
 Hint Resolve inconsistency_strengthening.
 
-Lemma shallow_insconsistency_dyn_r : forall t, not (t <≁> Dyn).  
+Lemma shallow_insconsistency_dyn_r : forall t, not (t # Dyn).  
 Proof. induction t; auto. Qed. 
-Lemma shallow_insconsistency_refl : forall t, not (t <≁> t).
+Lemma shallow_insconsistency_refl : forall t, not (t # t).
 Proof. induction t; auto. Qed.
-
-Lemma shallow_insconsistency_dyn_l : forall t, not (Dyn <≁> t). 
+Lemma shallow_insconsistency_dyn_l : forall t, not (Dyn # t). 
 Proof. induction t; auto. Qed.
 
 Hint Resolve
@@ -221,7 +219,7 @@ Hint Resolve
 Lemma consistent_symetric : forall t1 t2, t1 ∼ t2 -> t2 ∼ t1. 
 Proof. intros t1 t2 H. induction H; auto. Qed.
 
-Lemma shallow_consistent_symetric : forall t1 t2, t1 <∼> t2 -> t2 <∼> t1. 
+Lemma shallow_consistent_symetric : forall t1 t2, t1 !# t2 -> t2 !# t1. 
 Proof. intros t1 t2 H. induction H; auto. Qed.
 
 Hint Resolve consistent_symetric shallow_consistent_symetric. 
@@ -229,22 +227,23 @@ Hint Resolve consistent_symetric shallow_consistent_symetric.
 Lemma inconsistent_symetric : forall t1 t2, t1 ≁ t2 -> t2 ≁ t1. 
 Proof. auto. Qed. 
 
-Lemma shallow_inconsistent_symetric : forall t1 t2, t1 <≁> t2 -> t2 <≁> t1. 
+Lemma shallow_inconsistent_symetric : forall t1 t2, t1 # t2 -> t2 # t1. 
 Proof. auto. Qed. 
 
 Hint Resolve inconsistent_symetric shallow_inconsistent_symetric. 
 
 Definition blame_info : Type := nat.
 
-Lemma ty_depth_min : forall (t : ty), 1 <= ty_depth t.
+Lemma ty_depth_min : forall (t : ty), 0 <= ty_depth t.
 Proof. induction t; unfold depth; simpl; eauto. 
        - destruct (Max.max_spec (ty_depth t1) (ty_depth t2)) as [[]|[]].
-         * rewrite H1. auto. 
+         *  rewrite H1. auto. 
          * rewrite H1. auto. 
 Qed.
 
 Hint Resolve ty_depth_min. 
 
-Lemma depth_t_min : forall (t : ty), 1 <= [| t |].
-Proof.  auto. Qed. 
+Example depth_t_min : forall (t : ty), 0 <= [| t |]. 
+Proof. auto. Qed. 
+
 
