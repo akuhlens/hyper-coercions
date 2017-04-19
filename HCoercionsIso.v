@@ -4,9 +4,65 @@ Require Import LibTactics.
 Require Import GTypes. 
 Require Import coercions. 
 Require Import HCoercions.
+Require Import Omega. 
+Require Import omega_max. 
 
-Fixpoint h2c_weak (h : hc) : crcn :=
-  match h with
+SearchAbout "Bijection".
+
+
+
+
+t   := arbitrary types
+I J := injectables t ≠ ⋆
+l   := blame labels
+c   := space efficient coercions | i
+i   := ⊥ᴵˡᴶ |
+p   := ∈ | l
+h   := hyper coercions  | pt⊥ˡt
+
+⊥ᴵˡᴶ  <-> ∈t₁⊥ˡ
+
+Typing rule for failed in regular coercions
+pretty much direct translation from Siek et al (PLDI'15).
+
+t₁ ≠ ⋆   t₁ ∼ I    I ≠ J
+----------------------------
+   ⊢ ⊥ᴵˡᴶ : t₁ => t₂
+
+Typing rule for failed in hyper coercions
+
+ tₚ ≠ ⋆   ⊢ p : t₁ => tₚ
+----------------------------
+   ⊢ ptₚ⊥ˡ : t₁ => t₂
+
+Notice that here we are always able to reconstruct
+the projection side of the type in type judgements.
+
+
+Say we want to define isomorphic (≡) as the existance
+of a bijection between two entities.
+
+h ≡ c : 
+ ∃ f : h -> c, g : c -> h -> 
+  (∀ h, g (f h) = h) /\ (forall c, f (g c) = c)
+
+But we probably want that bijection
+to always produce well typed terms at
+the same type that previous derivation
+⊢ h : (t₁ => t₂) ->  ⊢ f h : (t₁ => t₂)
+/\
+⊢ c : (t₁ => t₂) ->  ⊢ g h : (t₁ => t₂)
+
+I think that it is unlikely that it is
+possible to find a function g that can
+live up to this expectation.
+
+
+
+Fixpoint h2c (t : (hc * ty * ty)) : crcn :=
+  match t with
+  | (h, t1, t2) => 
+    match h with 
     | (HC p t1 m t2 i) => 
       match p with
       | (prj l) => 
@@ -25,12 +81,13 @@ Fixpoint h2c_weak (h : hc) : crcn :=
       | (prj l) => (Prjc t1 l ;c (Failc t1 l t2))
       | prj_mt => (Failc t1 l t2)
       end
+    end
   end
-with m2c (m : hc_m) (t1 t2 : ty) : crcn :=
-       match m with
-       | Id_hc => (Id_c t1)
-       | Arr_hc c1 c2 => (Arr_c (h2c_weak c1) (h2c_weak c2))
+with m2c (m : hc_m) : crcn :=
+       match (m, t1, t2) with
+       | Arr_hc c1 c2, Arr t11 => (Arr_c (h2c_weak c1) (h2c_weak c2))
        | Ref_hc c1 c2 => (Refc (h2c_weak c1) (h2c_weak c2))
+                           
        end.
 
 Fixpoint inf_c (c : crcn) : (ty * ty) :=
@@ -100,18 +157,110 @@ Fixpoint c2h_weak (s : crcn) : hc :=
 
 
 Lemma  h2c_weak_wt' : forall n,
-    (forall t1 t2 h,
-        hc_depth h < n -> 
+    (forall h t1 t2,
         hc_wt h (t1 ⇒ t2) ->
+        hc_depth h < n -> 
         se_coercion (h2c_weak h) (t1 ⇒ t2))
     /\
-    (forall t1 t2 hc_m_depth h <= n -> hc_m_wt h (t1 ⇒ t2)
+    (forall m t1 t2, 
+        hc_m_wt m (t1 ⇒ t2) -> 
+        hc_m_depth m <= n ->
+        se_med_coercion (m2c m t1 t2) (t1 ⇒ t2)).
 Proof.
-  induction n; intuition. 
-  inverts H0. 
-  + inverts H3; inverts H5; inverts H6. 
-    all: simpl in *. 
+  assert (Hh :
+            (forall n, 
+                (forall m t1 t2, 
+                    hc_m_wt m (t1 ⇒ t2) -> 
+                    hc_m_depth m <= n ->
+                    se_med_coercion (m2c m t1 t2) (t1 ⇒ t2)) ->
+                (forall h t1 t2,
+                    hc_wt h (t1 ⇒ t2) ->
+                    hc_depth h < S n -> 
+                    se_coercion (h2c_weak h) (t1 ⇒ t2)))).
+  { introv Hm wt db. 
+    inverts wt.
+    + match goal with
+      | H: hc_m_wt ?m _ |- _ => 
+        assert (dbm : hc_m_depth m <= n); [eauto | idtac]
+      end.
+      inverts H1; inverts H4.
+        all: simpl.
+        all: eauto.
+      + inverts H3. all: simpl. all: eauto. }
+  assert (Hm :
+            (forall n, 
+                (forall m t1 t2, 
+                    hc_m_wt m (t1 ⇒ t2) -> 
+                    hc_m_depth m <= n ->
+                    se_med_coercion (m2c m t1 t2) (t1 ⇒ t2)) ->
+                (forall h t1 t2,
+                    hc_wt h (t1 ⇒ t2) ->
+                    1 + hc_depth h <= S n -> 
+                    se_coercion (h2c_weak h) (t1 ⇒ t2)))).
+  { eauto. }
+  induction n. 
+  - split. 
+    + introv wt db. inverts db. 
+    + introv wt db. 
+      inverts wt.
+      all: inverts db. 
+      * simpl. eauto.
+  - destruct IHn as [IHh IHm]. 
+    split. 
+    + apply Hh. assumption. 
+    + introv wt db. 
+      inverts wt.
+      * eauto. 
+      * simpl in *. eauto 6. (* apply Hm twice *)
+      * simpl in *. eauto 6. (* and again *)
+Qed. 
+  
+
+Lemma inf_c_wt : forall n c t1 t2,
+    crcn_depth c < n ->
+    se_coercion c (t1 ⇒ t2) ->
+    (t1, t2) = inf_c c.
+Proof.
+  induction n. 
+  all: introv db se.
+  - inverts db. 
+  - inverts se.
+    all: try match goal with 
+             | H: se_inj_coercion _ _ |- _ => inverts H
+             end. 
+    all: try match goal with
+             | H: se_med_coercion _ _ |- _ => inverts H
+             end.
+    all: simpl.
     
+ eauto. 
+
+
+Lemma c2h_wt : 
+  (forall n c t1 t2,
+      se_coercion c (t1 ⇒ t2) ->
+      crcn_depth c < n -> 
+      hc_wt (c2h_weak c) (t1 ⇒ t2)).
+Proof. 
+  induction n.
+  all: introv se db.
+  all: inverts se. 
+  all: try match goal with 
+           | H: se_inj_coercion _ _ |- _ => inverts H
+           end. 
+  all: try match goal with
+           | H: se_med_coercion _ _ |- _ => inverts H
+           end.
+  all: simpl; eauto. 
+  
+
+/\
+    (forall m t1 t2, 
+        hc_m_wt m (t1 ⇒ t2) -> 
+        hc_m_depth m <= n ->
+        se_med_coercion (m2c m t1 t2) (t1 ⇒ t2))
+
+
 Lemma h2c_weak_wt : forall t1 t2 h, 
     hc_wt h (t1 ⇒ t2) -> se_coercion (h2c_weak h) (t1 ⇒ t2). 
 Proof. introv wt. apply (h2c_weak_wt' (1 + hc_depth h)); eauto. Qed. 
