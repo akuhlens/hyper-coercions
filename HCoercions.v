@@ -4,6 +4,8 @@ Require Import General.
 Require Import Types.
 Require Import Omega. 
 Require Import SolveMax. 
+Require Import Coercions. 
+
 
 Inductive base : ty -> Prop :=
 | Base_Int : base Int
@@ -77,7 +79,9 @@ hc_m_depth m :=
 
 Open Scope depth_scope.
 Instance hc_deep : Deep hc := hc_depth.
-Hint Unfold hc_deep. 
+Instance hc_m_deep : Deep hc_m := hc_m_depth.
+Hint Unfold hc_deep hc_m_deep. 
+
 
 
 Inductive hc_wt : hc -> cty -> Prop := 
@@ -345,8 +349,8 @@ Proof. intuition. eapply (mk_hc_symetry' (S (hc_depth h))); eauto. Qed.
 Hint Resolve mk_hc_symetry.
 
 Lemma mk_hc_function' : forall n h h' t1 t2 l,
-    ty_depth t1 < n ->
-    ty_depth t2 < n -> 
+    [|t1|] < n ->
+    [|t2|] < n -> 
     mk_hc (t1, t2, l) h ->
     mk_hc (t1, t2, l) h' ->
     h = h'.
@@ -381,8 +385,9 @@ Lemma mk_hc_function : forall h1 h2 t1 t2 l,
     mk_hc (t1, t2, l) h2 ->
     h1 = h2.
 Proof. intros h1 h2 t1 t2 l.
-       apply (mk_hc_function' (1 + (ty_depth t1) + (ty_depth t2)));
-       omega. 
+       apply (mk_hc_function' (1 + [|t1|] + [| t2 |])).
+       max_tac. 
+       max_tac. 
 Qed.
 
 Hint Resolve mk_hc_function.
@@ -407,7 +412,7 @@ Program Fixpoint mk_hcf t1 t2 l {measure ((ty_depth t1) + (ty_depth t2))} : hc :
     | _, _ => (Fail prj_mt t1 l t2)
     end.
 
-Require Import Coercions. 
+
 Solve All Obligations with tc_mk_coercion. 
 Notation "[ t => l => g ]" := (mk_hcf t g l) (at level 70). 
 
@@ -469,12 +474,12 @@ Proof.
 
 
   (* solve by deriving proofs of existance and inequalities *)
-  
+
   all: 
     try 
       solve [eexists; split; 
              [solve[try (constructor; discriminate); eauto]
-             | simpl in *; omega_max]].
+             | max_tac]].
 Qed. 
 
 
@@ -589,8 +594,8 @@ Lemma mk_hc_id : forall t l, mk_hc (t, t, l) (HC prj_mt t Id_hc t inj_mt).
 Proof. intros [] l; auto. Qed. 
 
 Lemma hc_m_le_hc_depth : forall p m i t1 t2,
-     hc_m_depth m <= hc_depth (HC p t1 m t2 i). 
-Proof. intros p m i t1 t2. simpl. auto. Qed.
+     [| m |] <= [| HC p t1 m t2 i |]. 
+Proof. intros p m i t1 t2. autounfold. simpl. auto. Qed. 
 
 Hint Resolve hc_m_le_hc_depth. 
 
