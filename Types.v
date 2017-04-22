@@ -2,7 +2,6 @@ Require Import General.
 Require Import Coq.Bool.Bool. 
 Require Import LibTactics.
 
-
 Inductive ty := 
 | Int   : ty
 | Bool  : ty
@@ -23,9 +22,10 @@ Fixpoint ty_depth t : nat :=
 
 Open Scope depth_scope. 
 Instance ty_deep : Deep ty := ty_depth.
+Hint Unfold ty_deep. 
 
 Lemma ty_depth_lt_0 : forall (t:ty), [| t |] < 0 -> False. 
-Proof. unfold depth. intros [] H; inverts H. Qed.
+Proof. intuition. Qed.
 
 Hint Resolve ty_depth_lt_0.
   

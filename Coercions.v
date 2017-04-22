@@ -1,11 +1,11 @@
 Require Import Coq.Init.Datatypes.
-Require Import LibTactics.
-Require Export General.
 Require Import Coq.Program.Tactics.
 Require Import Coq.Program.Wf.
 Require Import Omega.
-
-Require Import GTypes. 
+Require Import LibTactics.
+Require Import General.
+Require Import SolveMax. 
+Require Import Types. 
 
 Open Scope depth_scope. 
 
@@ -48,10 +48,10 @@ Inductive wt_coercion : coercion -> cty -> Prop :=
     wt_coercion c1 (g1 ⇒ t1) ->
     wt_coercion c2 (t2 ⇒ g2) ->
     wt_coercion (c1 →c c2) ((t1 → t2) ⇒ (g1 → g2))
-| Wt_Fail_c : forall t1 t2 l,
+| Wt_Fail_c : forall t1 t2 t3 t4 l,
     t1 <> Dyn ->
     t2 <> Dyn ->
-    wt_coercion (Failc t1 l t2) (t1 ⇒ t2).
+    wt_coercion (Failc t1 l t2) (t3 ⇒ t4).
 
 Hint Constructors wt_coercion. 
 
@@ -62,19 +62,21 @@ Proof. eauto. Qed.
 
 
 Inductive se_coercion : coercion -> cty -> Prop :=
-| Se_Id {t} : se_coercion (ιc t) (t ⇒ t)
+(* | Se_Id {t} : se_coercion (ιc t) (t ⇒ t) *) 
 | Se_Seq  : forall t1 t2 l c,
     t1 <> Dyn -> 
     se_inj_coercion c (t1 ⇒ t2) -> 
     se_coercion (Prjc t1 l ;c c) (Dyn ⇒ t2)
 | Se_Inj  : forall t1 t2 c,
-    t1 <> Dyn ->
+(*  t1 <> Dyn -> *)
     se_inj_coercion c (t1 ⇒ t2) -> 
     se_coercion c (t1 ⇒ t2)
 with se_inj_coercion : coercion -> cty -> Prop := 
-| Se_Inj_Fail : forall t1 t2 l,
-    se_inj_coercion (Failc t1 l t2) (t1 ⇒ t2)
+| Se_Inj_Fail : forall t1 t2 t3 t4 l,
+    t1 <> Dyn -> t2 <> Dyn ->
+    se_inj_coercion (Failc t1 l t2) (t3 ⇒ t4)
 | Se_Inj_Med  : forall t1 t2 c,
+    t2 <> Dyn ->
     se_med_coercion c (t1 ⇒ t2) ->
     se_inj_coercion (c ;c Injc t2) (t1 ⇒ Dyn)
 | Se_Inj_Id   : forall t1 t2 c,
@@ -275,6 +277,8 @@ Hint Immediate make_coercion_wt.
 Lemma ty_depth_min : forall (t : ty), 0 <= [| t |].
 Proof. auto. Qed. 
 
+
+(*
 Ltac spec_max_with_guard m n :=
   match goal with
   | H: m < n |- _ => fail 1
@@ -356,6 +360,7 @@ Ltac max_tac :=
              | _ => auto
              end.
 
+*)
 Hint Immediate make_coercion_wt. 
 
 Inductive make_se_coercion
@@ -406,8 +411,12 @@ Proof.
                  H: make_se_coercion _ ?c |- _ =>
              apply IH in H
            end;
-    try solve[econstructor; try congruence; eauto]. 
-  - econstructor. intro. subst. contradiction H1. auto. eauto.
+    try match goal with
+          | H: ?t1 # ?t2 |- _ => 
+            assert (t1 <> Dyn) by (intro; contradiction H; subst; eauto);
+            assert (t2 <> Dyn) by (intro; contradiction H; subst; eauto)
+        end;
+    try solve[econstructor; try congruence; eauto].
 Qed. 
 
 Lemma make_se_coercion_symmetry : forall c1 t1 t2 l,
@@ -421,7 +430,7 @@ Proof.
          | H: make_se_coercion _ ?c, IH: context[make_se_coercion _ ?c -> _] |- _ =>
            let i:= fresh in 
            destruct (IH _ _ _ H) as [i []]; clear H
-         | _ => solve [eexists; split; [> eauto | ineq_tac]]
+         | _ => solve [eexists; split; [> eauto | max_tac]]
          end.
 Qed.
 
@@ -441,7 +450,7 @@ Proof.
              let f := fresh in
              solve[eexists;
                    split;
-                   [econstructor; intro f; (discriminate || inverts f) | ineq_tac]]
+                   [econstructor; intro f; (discriminate || inverts f) | max_tac]]
            | _ => solve [eauto] 
            end.
   all: match goal with
@@ -471,7 +480,7 @@ Proof.
       end. 
   all: eexists; split. 
   all: eauto. 
-  all: ineq_tac. 
+  all: max_tac.   
 Qed. 
 
 Lemma make_se_function' : forall n c1 c2 t1 t2 l,
@@ -487,7 +496,7 @@ Proof.
         | H: make_se_coercion _ _, P: make_se_coercion _ _  |- _ =>
           inverts H; inverts P
         end.
-    all: eauto || false; eauto || ineq_tac. 
+    all: eauto || false; eauto || max_tac. 
   - intros c1 c2 [] [] l b1 b2 mk1 mk2.
     all:match goal with
         | H: make_se_coercion _ _, P: make_se_coercion _ _  |- _ =>
@@ -503,8 +512,8 @@ Proof.
                   
                   apply (IH c1 c2) in H1;
                     [subst
-                    | solve [ineq_tac]
-                    | solve [ineq_tac]
+                    | solve [max_tac]
+                    | solve [max_tac]
                     | assumption]
                 | _ => auto
                 end.
@@ -516,7 +525,7 @@ Lemma make_se_coercion_function : forall h1 h2 t1 t2 l,
     h1 = h2.
 Proof. intros h1 h2 t1 t2 l.
        apply (make_se_function' (max [|t1|] [|t2|]));
-       ineq_tac. 
+       max_tac. 
 Qed. 
 
 

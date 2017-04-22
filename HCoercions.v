@@ -1,10 +1,9 @@
 Require Import Coq.Init.Datatypes.
-
 Require Import LibTactics. 
-Require Import GTypes.
-Require Import coercions. 
+Require Import General. 
+Require Import Types.
 Require Import Omega. 
-Require Import omega_max. 
+Require Import SolveMax. 
 
 Inductive base : ty -> Prop :=
 | Base_Int : base Int
@@ -76,6 +75,9 @@ hc_m_depth m :=
   | Ref_hc c1 c2 => 1 + max (hc_depth c1) (hc_depth c2)
   end.
 
+Open Scope depth_scope.
+Instance hc_deep : Deep hc := hc_depth.
+Hint Unfold hc_deep. 
 
 
 Inductive hc_wt : hc -> cty -> Prop := 
@@ -139,15 +141,15 @@ Ltac rule_out_absurd_hc_contains :=
          end].
 
 Lemma hc_size_lt_contained_hc : forall h,
-    (forall h', hc_contains_hc h h' -> hc_depth h' < hc_depth h).
+    (forall h', hc_contains_hc h h' -> [|h'|] < [|h|]).
 Proof.
   intro h. 
   elim h using hc_ind_mut with
     (P := fun h => forall h',
-              hc_contains_hc h h' -> hc_depth h' < hc_depth h)
+              hc_contains_hc h h' -> [|h'|] < [|h|])
     (P0 := fun m => forall h h',
                hc_m_sub_hc m h ->
-               hc_contains_hc h h' -> hc_depth h' < hc_depth h).
+               hc_contains_hc h h' -> [|h'|] < [|h|]).
   all: intuition. 
   all: try rule_out_absurd_hc_contains.
   all:
@@ -172,13 +174,12 @@ Proof.
              IH: context[hc_m_sub_hc _ _ -> hc_contains_hc _ _ -> _]
           |- _ =>
           apply IH in H
-        end;
-    simpl in *; ineq_tac. 
+        end. 
+    all: try (eauto; max_tac). 
 Qed.
 
-
 Lemma hc_depth_lt_contained_hc : forall h h',
-    hc_contains_hc h h' -> hc_depth h' < hc_depth h.
+    hc_contains_hc h h' -> [|h'|] < [|h|].
 Proof.
   intro h. 
   elim h using hc_ind_mut with
@@ -204,31 +205,32 @@ Proof.
                     H1: hc_m_sub_hc _ _,
                         H2: hc_contains_hc _ _
                 |- _ => apply (IH _ _ H1) in H2
-              | _ => solve[simpl in *; auto] 
+              | _ => solve[simpl in *; eauto] 
               end.
-  all: repeat match goal with
-              | H: hc_m_sub_hc _ _ |- _ => inverts H
-              end;
+  all: 
+    repeat match goal with
+           | H: hc_m_sub_hc _ _ |- _ => inverts H
+           end;
     match goal with
-    | IH: _ -> _ |- _ => apply IH; eauto
+    | IH: _ -> _ |- _ => apply IH; eauto 
     end. 
 Qed.
 
 Hint Resolve hc_depth_lt_contained_hc. 
 
 Lemma hc_contains_hc_depth_help : forall n h1 h2,
-    hc_depth h1 < S n -> hc_contains_hc h1 h2 -> hc_depth h2 < n.
-Proof. intuition. apply hc_depth_lt_contained_hc in H0. omega. Qed.
+    [|h1|] < S n -> hc_contains_hc h1 h2 -> [|h2|] < n.
+Proof. intuition. apply hc_depth_lt_contained_hc in H0. max_tac. Qed. 
 
 Ltac contains_tac :=
   match goal with
-    | H: hc_depth ?h1 < S ?n |- hc_depth ?h2 < ?n =>
+    | H: [|?h1|] < S ?n |- [|?h2|] < ?n =>
       apply (hc_contains_hc_depth_help n h1 h2);
       [solve [eauto] | solve [eauto] | idtac ..]
   end.
 
 Lemma hc_contains_trans' : forall n h1 h2 h3,
-    hc_depth h1 < n -> 
+    [|h1|] < n -> 
     hc_contains_hc h1 h2 -> hc_contains_hc h2 h3 -> hc_contains_hc h1 h3.
 Proof.
   induction n; intuition; inverts H0; inverts H1; eauto. 
@@ -281,7 +283,7 @@ Inductive mk_hc : ty * ty * blame_info -> hc -> Prop :=
 Hint Constructors mk_hc. 
 
 Lemma mk_hc_wt' : forall n t1 t2 l h,
-    hc_depth h < n ->
+    [|h|] < n ->
     mk_hc (t1, t2, l) h -> hc_wt h (t1 ⇒ t2).
 Proof.
   induction n; intuition. 
@@ -319,25 +321,25 @@ Ltac prove_inconsistent :=
   end.
 
 Lemma mk_hc_symetry' : forall n h t1 t2 l,
-    hc_depth h < n -> 
+    [|h|] < n -> 
     mk_hc (t1, t2, l) h -> 
-    exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h'.
+    exists h', mk_hc (t2, t1, l) h' /\ [|h|] = [|h'|].
 Proof.
   induction n;  intuition.
   inverts H0; eauto. 
   - eapply IHn in H6 as [H6 []]; eapply IHn in H7 as [H7 []];
-    try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+    try (eexists; split; eauto; simpl in *; subst; max_tac);
     contains_tac. 
   - eapply IHn in H6 as [H6 []]; eapply IHn in H7 as [H7 []];
-    try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+    try (eexists; split; eauto; simpl in *; subst; max_tac);
     contains_tac. 
-  - try (eexists; split; eauto; simpl in *; subst; ineq_tac);
+  - try (eexists; split; eauto; simpl in *; subst; max_tac);
     contains_tac. 
 Qed. 
 
 Lemma mk_hc_symetry : forall h t1 t2 l,
     mk_hc (t1, t2, l) h -> 
-    exists h', mk_hc (t2, t1, l) h' /\ hc_depth h = hc_depth h'.
+    exists h', mk_hc (t2, t1, l) h' /\ [|h|] = [|h'|].
 Proof. intuition. eapply (mk_hc_symetry' (S (hc_depth h))); eauto. Qed. 
 
 Hint Resolve mk_hc_symetry.
@@ -366,8 +368,8 @@ Proof. induction n; intuition.
                      H2: mk_hc (?t1, ?t2, _) ?c2 |- _ =>
              apply (IH c1 c2) in H1; 
                [subst 
-               | solve [ineq_tac] 
-               | solve [ineq_tac] 
+               | solve [max_tac] 
+               | solve [max_tac] 
                | solve [auto] 
                | idtac ..]
            | _ => solve [auto]
@@ -405,6 +407,7 @@ Program Fixpoint mk_hcf t1 t2 l {measure ((ty_depth t1) + (ty_depth t2))} : hc :
     | _, _ => (Fail prj_mt t1 l t2)
     end.
 
+Require Import Coercions. 
 Solve All Obligations with tc_mk_coercion. 
 Notation "[ t => l => g ]" := (mk_hcf t g l) (at level 70). 
 

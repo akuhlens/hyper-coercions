@@ -1,20 +1,9 @@
 Require Coq.Arith.PeanoNat. 
-
-
-
-SearchAbout "max".
-
-
-
-
-SearchAbout "UsualMinMaxProperties".
- 
 Require Import Omega. 
-
-
 Require Import LibTactics. 
-
 Require Import General. 
+
+Arguments max n m : simpl nomatch.
 
 Ltac spec_max_with_guard m n :=
   match goal with
@@ -69,7 +58,6 @@ Hint Resolve
      max_le_imp_left
      max_le_imp_left. 
 
-SearchAbout "le". 
 Lemma lt_S : forall n m, n < m -> S n < S m. 
 Proof. intuition. Qed. 
 Lemma le_S : forall n m, n <= m -> S n <= S m. 
@@ -130,7 +118,7 @@ Proof.
   intros n m o. destruct (Max.max_spec m o) as [[]|[]]; omega.
 Qed.                                    
 
-  Ltac rewrite_triple_tac p m n o :=
+Ltac rewrite_triple_tac p m n o :=
   (let m':=fresh in
    let n':=fresh in
    let o':=fresh in
@@ -138,7 +126,7 @@ Qed.
    remember n as n'; 
    remember o as o';
    rewrite (p m' n' o') in *) .
-
+   
 Ltac explain_max' n p :=
   let m:=fresh in
   remember (max n p) as m;
@@ -165,68 +153,62 @@ Ltac explain_max :=
          | H: context[max ?n ?p] |- _  => explain_max' n p
          end.
 
-
-Ltac omega_max_search :=
-  repeat match goal with
-         | _ => rewrite Max.max_idempotent in *
-         | _ => solve[assumption || congruence || auto || omega]
-         | _ => apply lt_S || apply le_S || apply eq_S
-         | |- _ < max _ _ => 
-           (apply lt_max_left; omega_max_search) 
-           || (apply lt_max_right; omega_max_search)
-         | |- max _ _ < _ => apply max_lt
-         | |- context[max ?m ?n] => spec_max_with_guard m n
-         | H: context[max ?m ?n] |- _ => spec_max_with_guard m n
-         | |- context[match ?t with _ => _ end] =>
-           match goal with
-           | |- ?g => destruct t
+(* I was trying to come up with an incomplete decision
+   procedure for solveing systems of equations involving
+   max without employing omega to do sat solving. *)
+(*
+Ltac solve_max_search n :=
+  match n with 
+  | S ?n' => 
+    repeat match goal with
+           | _ => rewrite Max.max_idempotent in *
+           | _ => solve[assumption || congruence || omega]
+           | _ => apply lt_S || apply le_S || apply eq_S
+           | H: _ |- _ => 
+             apply lt_P in H || apply le_S in H || apply eq_P in H
+           | |- _ < max _ _ => 
+             (apply lt_max_left; omega_max_search) 
+             || (apply lt_max_right; omega_max_search)
+           | |- max _ _ < _ => apply max_lt
            end
-         end.
+  end.
+*) 
 
-Ltac omega_max :=
+Ltac solve_max :=
   intros;
   try rewrite Max.max_0_l in *;
   try rewrite Max.max_0_r in *;
   try rewrite Max.max_idempotent in *;
   explain_max;
-  subst; 
+  subst;
   omega. 
 
-
-
-Ltac ineq_tac := intuition;
-                 (solve[eauto 7] 
-                  || solve[unfold depth in *; simpl in *; time "omega_max" omega_max]). 
-
+Ltac max_tac := 
+  intuition solve[repeat autounfold in *;
+                  simpl in *; 
+                  solve_max].  
 
 Example lt1 : forall n m o p, n < m -> n < max o (max p m). 
-Proof. ineq_tac. Qed. 
+Proof. max_tac. Qed.
 Example lt2 : forall n m o p, n < m -> n < max (max p m) o. 
-Proof. ineq_tac. Qed. 
+Proof. max_tac. Qed. 
 Example eq1 : forall n m o p s t,
     S (max (max (max n m) (max o p)) (max s t))
     =
     S (max (max (max o p) (max n m)) (max s t)).
-Proof. ineq_tac. Qed. 
+Proof. max_tac. Qed. 
 
-Example le1 : forall t1 t2 x x1, x = x1 -> x <= max t1 t2 ->  
+Example le0 : forall t1 t2 x x1, x = x1 -> x <= max t1 t2 ->  
   S (max (max t1 t2) (max x x1)) 
        <=
        S (max t1 t2).
-Proof. ineq_tac. Qed.
+Proof. max_tac. Qed.
 
-
-
-Example le2 : forall t0 t4 t5 t6 t8 t9 c0 c1 c2 c3 c4 c,
-  S (max (max (max t8 t9) (max t4 t5)) (max c0 c3)) <=
-  S (max (max t8 t9) (max t4 t5))
-  ->
-  c <= max c0 c1
-  -> 
-  c4 <= max c2 c3
-  -> 
-  S (max (max (max t0 t6) (max t4 t5)) (max c c4)) <=
-  S (max (max (max (max t0 t6) (max t8 t9)) 
+Example  le1 : forall t0 t6 t4 t5 c1 c2 t8 t9,
+    (max (max t0 t6) (max t4 t5)) <= 
+    (max (max (max (max t0 t6) (max t8 t9)) 
               (max c1 c2))
          (max (max t4 t5) (max t4 t5))).
-Proof. Admitted. 
+Proof.
+  intros. max_tac. 
+Qed. 
