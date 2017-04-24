@@ -428,14 +428,12 @@ Ltac comp_tac :=
   match goal with
   | H: mk_hc _ (HC _ _ ?m3 _ _)
     |- context[compose_hc (HC _ _ ?m1 _ _, HC _ _ ?m2 _ _) _] =>
-    idtac m3 m1 m2;
     let m4:=fresh in
     let m5:=fresh in
     comp_exists m1 m3 m4;
     comp_exists m4 m2 m5
   | |- context[compose_hc (HC _ _ ?m1 _ inj_mt, 
                            HC prj_mt _ ?m2 _ _) _] =>
-    idtac m1 m2;
     let m3:=fresh in
     comp_exists m1 m2 m3
   end. 

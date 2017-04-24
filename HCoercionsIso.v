@@ -9,7 +9,7 @@ Require Import HCoercionsCompose.
 Require Import Omega. 
 Require Import SolveMax.
 Open Scope depth_scope. 
-SearchAbout "Bijective".
+(* SearchAbout "Bijective". *)
 
 (*
 
