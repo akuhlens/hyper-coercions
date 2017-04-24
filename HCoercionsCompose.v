@@ -23,8 +23,7 @@ Qed.
 Inductive hc_contains_ty : hc -> ty -> Prop :=
 | hct1 {p t1 m t2 i}: hc_contains_ty (HC p t1 m t2 i) t1
 | hct2 {p t1 m t2 i}: hc_contains_ty (HC p t1 m t2 i) t2
-| hcf1 {p t1 t2 l} : hc_contains_ty (Fail p t1 l t2) t1
-| hcf2 {p t1 t2 l} : hc_contains_ty (Fail p t1 l t2) t1
+| hcf1 {p t1 l} : hc_contains_ty (Fail p t1 l) t1
 | sub {p t1 m t2 i h t}:
     hc_m_sub_hc m h ->
     hc_contains_ty h t -> 
@@ -39,7 +38,6 @@ Proof.
   induction n;
     autounfold in *; intuition. 
   inverts H0. 
-  - max_tac. 
   - max_tac. 
   - max_tac. 
   - max_tac. 
@@ -68,7 +66,6 @@ Lemma mk_hc_depth_help : forall n c1 c2 c3 t1 t2 l,
     hc_depth c3 < n.
 Proof. 
   intuition. 
-  Check hc_contains_ty_depth. 
   apply hc_contains_ty_depth in H1. 
   apply hc_contains_ty_depth in H2.
   apply mk_hc_depth  in H3. 
@@ -89,11 +86,12 @@ Lemma mk_hc_lemma : forall t1 t2 l,
      (exists m, 
          mk_hc (t1, t2, l) (HC prj_mt t1 m t2 inj_mt)
          /\
-         hc_depth  (HC prj_mt t1 m t2 inj_mt) <= Init.Nat.max (ty_depth t1) (ty_depth t2)))      
+         hc_depth  (HC prj_mt t1 m t2 inj_mt)
+         <= Init.Nat.max (ty_depth t1) (ty_depth t2)))      
     \/ 
     (t1 # t2
      /\
-     (mk_hc (t1, t2, l) (Fail prj_mt t1 l t2))).
+     (mk_hc (t1, t2, l) (Fail prj_mt t1 (t1, l, t2)))).
 Proof. 
   intros t1 t2 l nd1 nd2. 
   destruct (ty_shallow_consistency_dec t1 t2) as [c | c].
@@ -312,7 +310,7 @@ Ltac mk_hc_tac :=
     match goal with
     | |- context[compose_hc (HC _ _ _ ?t2 inj, HC (prj ?l) ?t3 _ _ _) _] =>
       mk_hc_tac' t2 t3 l
-    | |- context[compose_hc (HC _ _ _ ?t2 inj, Fail (prj ?l) ?t3 _ _) _] =>
+    | |- context[compose_hc (HC _ _ _ ?t2 inj, Fail (prj ?l) ?t3 _) _] =>
       mk_hc_tac' t2 t3 l
   end.
 Ltac inner_ty_consist_dec_tac :=
@@ -367,15 +365,15 @@ Lemma compose_correct_recontruct_hcXhc_fail:
   forall p t1 m1 t2 l m2 t3 i t1' t3' t4,
     hc_wt (HC p t1 m1 t2 inj) (t1' ⇒ Dyn) ->
     hc_wt (HC (prj l) t3 m2 t4 i) (Dyn ⇒ t3') ->
-    mk_hc (t2, t3, l) (Fail prj_mt t2 l t3) -> 
+    mk_hc (t2, t3, l) (Fail prj_mt t2 (t2, l, t3)) -> 
     (forall h3' : hc,
         compose_hc
           ((HC p t1 m1 t2 inj), (HC (prj l) t3 m2 t4 i)) h3' ->
-        Fail p t1 l t4 = h3')
+        Fail p t1 (t2, l, t3)  = h3')
     /\
-    hc_wt (Fail p t1 l t4) (t1' ⇒ t3')
+    hc_wt (Fail p t1 (t2, l, t3)) (t1' ⇒ t3')
     /\
-    [|Fail p t1 l t4|]
+    [|Fail p t1 (t2, l, t3)|]
     <=
     max [|HC p t1 m1 t2 inj|] [|HC (prj l) t3 m2 t4 i|].
 Proof.
@@ -486,7 +484,7 @@ Proof.
         | H1: hc_i_wt i _, H2: hc_p_wt p _ |- _ =>
           inverts H1; inverts H2; eauto 6
         end
-      | |- context[compose_hc (HC _ _ _ _ ?i, Fail ?p _ _ _) _] =>
+      | |- context[compose_hc (HC _ _ _ _ ?i, Fail ?p _ _) _] =>
         match goal with
         | H1: hc_i_wt i _, H2: hc_p_wt p _ |- _ =>
           inverts H1; inverts H2; eauto 6
@@ -513,7 +511,7 @@ Proof.
     all: eexists; split; [idtac | split; [idtac | idtac]]. 
     all: eauto. 
     introv c; inverts c; eauto. 
-  - mk_hc_tac.
+  - mk_hc_tac. 
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
@@ -521,7 +519,7 @@ Proof.
       * max_tac. 
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
+      * introv c; inverts c;try contradiction; determinism_tac; eauto. 
       * eauto. 
       * max_tac. 
   - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
@@ -537,8 +535,8 @@ Proof.
       * max_tac. 
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      *  tc_tac; constructor; try congruence; eauto. 
+      * introv c; inverts c; determinism_tac; eauto. 
+      * tc_tac; constructor; try congruence; eauto. 
       * destruct t6.
         all: try solve[contradiction]. 
         all: try solve[contradiction H; eauto].
@@ -559,7 +557,7 @@ Proof.
         all: max_tac.  
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
+      * introv c; inverts c; determinism_tac; eauto.
       * tc_tac; constructor; try congruence; eauto. 
       * destruct t6.
         all: try solve[contradiction]. 
