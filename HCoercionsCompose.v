@@ -361,6 +361,16 @@ Ltac inner_ty_consist_dec_tac :=
               mk_hc_tac
             end.
 
+Lemma arr_not_dyn_l : forall t1 t2, t1 → t2 <> Dyn.
+Proof. congruence. Qed. 
+Lemma arr_not_dyn_r : forall t1 t2, Dyn <> t1 → t2. 
+Proof. congruence. Qed. 
+Lemma ref_not_dyn_r : forall t1, Dyn <> Ref t1. 
+Proof. congruence. Qed. 
+Lemma ref_not_dyn_l : forall t2, Ref t2 <> Dyn. 
+Proof. congruence. Qed. 
+Hint Resolve arr_not_dyn_r arr_not_dyn_l ref_not_dyn_l ref_not_dyn_r.
+
 Lemma compose_correct_recontruct_hcXhc_fail:
   forall p t1 m1 t2 l m2 t3 i t1' t3' t4,
     hc_wt (HC p t1 m1 t2 inj) (t1' ⇒ Dyn) ->
@@ -384,8 +394,8 @@ Proof.
     all: determinism_tac. 
     all: tc_tac_full.
     all: reflexivity. 
-  - inverts wt1; tc_tac; eauto;
-    constructor; try congruence; eauto. 
+  - inverts keep wt1; inverts keep mk23; tc_tac; eauto.
+    all: inverts keep wt2; tc_tac; eauto.
   - max_tac.  
 Qed. 
 
@@ -438,6 +448,33 @@ Ltac comp_tac :=
     comp_exists m1 m2 m3
   end. 
 
+Lemma sct_arr_trans : forall t1 t2 t1' t2' t3,
+    t1 → t2 !# t3 -> t1' → t2' !# t3.
+Proof.
+  introv sct. 
+  destruct t3; inverts sct; eauto. 
+Qed.
+Lemma sct_ref_trans : forall t1 t2 t1',
+    Ref t1 !# t2 -> Ref t1' !# t2. 
+Proof.
+  introv sct.
+  destruct t2; inverts sct; eauto.
+Qed.
+Lemma sct_refl : forall t1 t2,
+    t1 !# t2 -> t2 !# t1. 
+Proof.
+  introv s. inverts s; eauto.
+Qed. 
+Hint Resolve sct_arr_trans sct_ref_trans sct_refl.
+
+Lemma sic_refl : forall t1 t2, t1 # t2 -> t2 # t1.
+Proof. introv s. intro c. inverts c; contradiction s; eauto. Qed.
+Lemma sic_not_dyn_l : forall t1 t2, t1 # t2 -> t1 <> Dyn.
+Proof. introv s. intro c. subst. contradiction s; eauto. Qed.
+Hint Resolve sic_refl sic_not_dyn_l.
+Lemma sic_not_dyn_r : forall t1 t2, t1 # t2 -> t2 <> Dyn.
+Proof. eauto. Qed. 
+Hint Resolve sic_not_dyn_r. 
 
 Theorem compose_hc_mostly_correct :
   forall n h1 h2 t1 t2 t3,
@@ -500,20 +537,37 @@ Proof.
                   try comp_tac;
                   eauto 6].
   (* 11 goals left *)
+  - exists; split; [idtac | split; idtac].
+    + eauto.
+    + introv c. inverts c.
+      all: tc_tac.
+      all: eauto.
+    + eauto. 
   - tc_tac_full. 
     all: eexists; split; [idtac | split; [idtac | idtac]]. 
     all: eauto. 
     all: introv c; inverts c; eauto. 
-    all: contradiction. 
-  - tc_tac_full.
-    all: eexists; split; [idtac | split; [idtac | idtac]]. 
-    all: eauto. 
-    introv c; inverts c; eauto. 
+  - mk_hc_tac.  
+    + all: eexists; split; [idtac | split; [idtac | split]]. 
+      * eauto.
+      * introv c. inverts c; tc_tac; try congruence; determinism_tac.
+      * tc_tac. all: eauto.
+      * max_tac. 
+    + eexists; split; [idtac | split; [idtac | split]]. 
+      * eauto.
+      * introv c; inverts c; determinism_tac; eauto; congruence. 
+      * eauto. 
+      * max_tac. 
+  - eexists; split; [idtac | split; [idtac | split]]. 
+    + eauto. 
+    + introv c; inverts c; eauto.
+    + eauto.
+    + max_tac.
   - mk_hc_tac. 
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * eauto. 
+      * inverts wt2. tc_tac; eauto.
       * max_tac. 
     + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
@@ -544,29 +598,12 @@ Proof.
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
       * tc_tac; constructor; try congruence; eauto. 
       * max_tac. 
-    - mk_hc_tac. 
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      *  tc_tac; constructor; try congruence; eauto. 
-      * inverts keep H.
-        all: try contradiction.
-        all: try solve[contradiction H; eauto].
-        all: max_tac.  
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; determinism_tac; eauto.
-      * tc_tac; constructor; try congruence; eauto. 
-      * destruct t6.
-        all: try solve[contradiction]. 
-        all: try solve[contradiction H; eauto].
-        all: max_tac. 
     - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
       * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-    -  eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+      * max_tac.
+    - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
       * eauto. 
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
       * tc_tac; constructor; try congruence; eauto. 
@@ -575,12 +612,7 @@ Proof.
       * eauto. 
       * introv c; inverts c; try contradiction; eauto; determinism_tac. 
       * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-    -  eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
+      * max_tac.
 Qed.     
 
 Hint Resolve compose_hc_mostly_correct.  

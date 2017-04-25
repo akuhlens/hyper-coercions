@@ -72,9 +72,16 @@ Inductive se_coercion : coercion -> cty -> Prop :=
     se_inj_coercion c (t1 ⇒ t2) -> 
     se_coercion c (t1 ⇒ t2)
 with se_inj_coercion : coercion -> cty -> Prop := 
-| Se_Inj_Fail : forall t1 t2 t3 t4 l,
-    t1 <> Dyn -> t2 <> Dyn ->
-    se_inj_coercion (Failc t1 l t2) (t3 ⇒ t4)
+| Se_Inj_Fail : forall t1 t2 I1 I2 l,
+    (* This is the moral equivalent of the fail type rule 
+       from siek at al PLDI 2015 
+     Here we use the shallow varients of consistency because
+     injectables are always shallow in their language.
+     Where in lazy-d injectables are deep and inconsitency
+     are reported lazily *)
+    t1 <> Dyn -> I1 <> Dyn -> I2 <> Dyn ->
+    t1 !# I1 -> I1 # I2 ->
+    se_inj_coercion (Failc I1 l I2) (t1 ⇒ t2)
 | Se_Inj_Med  : forall t1 t2 c,
     t2 <> Dyn ->
     se_med_coercion c (t1 ⇒ t2) ->
@@ -540,11 +547,12 @@ Proof.
 Qed. 
   
 Inductive compose_coercions : coercion * coercion -> coercion -> Prop :=
-| Comp_Inj_Prj : forall t g c l,
-    make_coercion (t, g, l) c -> 
-    compose_coercions (Injc t, Prjc t l) c
-| Compose_Id_L : forall t c, compose_coercions (ιc t, c) c
-| Compose_Id_R : forall t c, compose_coercions (c, ιc t) c
+| Comp_Inj_Prj : forall t g l s1 s2 s3 s4 s5,
+    make_coercion (t, g, l) s3 ->
+    se_med_coercion s1 (t1 ⇒ t2) ->
+    compose_coercions (s3, s2) s4 -> 
+    compose_coercions (s1, s4) s5 -> 
+    compose_coercions (s1 ;c Injc t, Prjc t l ;c s2) s5
 | Comp_Arr   : forall c1 c2 c3 c4 c5 c6,
     compose_coercions (c3, c1) c5 ->
     compose_coercions (c2, c4) c6 ->
@@ -554,10 +562,11 @@ Inductive compose_coercions : coercion * coercion -> coercion -> Prop :=
     compose_coercions (c2, c4) c6 ->
     compose_coercions (Refc c1 c2, Refc c3 c4) (Refc c5 c6)
 | Compose_Seq_c_L : forall c1 c2 c3 c4,
-    compose_coercions (c2, c3) c4 -> 
-    compose_coercions (Seq_c c1 c2, c3) (Seq_c c1 c4)
+    compose_coercions (c1, c2) s3 -> 
+    compose_coercions (Prjc t l ;c s1, s2) (Prjc t l ;c s3)
 | Compose_Seq_c_R : forall c1 c2 c3 c4,
-    compose_coercions (c1, c2) c4 -> 
+    se_med_coercion s1 (t1 ⇒ t2) ->
+    se_med_coercion s2 (t3 ⇒ t4) ->
     compose_coercions (c1, Seq_c c2 c3) (Seq_c c4 c3)                       
 | Comp_Other : forall c1 c2,
     compose_coercions (c1, c2) (Seq_c c1 c2)

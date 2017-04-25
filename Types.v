@@ -204,6 +204,21 @@ Qed.
 
 Hint Resolve inconsistency_strengthening.
 
+Lemma sic_imp_not_dyn_l : forall t1 t2,
+    t1 # t2 -> t1 <> Dyn.
+Proof.
+  introv h. intro. subst. contradiction h. eauto.
+Qed. 
+
+
+Lemma sic_imp_not_dyn_r : forall t1 t2,
+    t1 # t2 -> t2 <> Dyn. 
+Proof.
+  introv h. intro. subst. contradiction h. eauto.
+Qed. 
+
+Hint Resolve sic_imp_not_dyn_l sic_imp_not_dyn_r.
+
 Lemma shallow_insconsistency_dyn_r : forall t, not (t # Dyn).  
 Proof. induction t; auto. Qed. 
 Lemma shallow_insconsistency_refl : forall t, not (t # t).

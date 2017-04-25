@@ -94,10 +94,11 @@ Inductive hc_wt : hc -> cty -> Prop :=
     hc_m_wt m (t2 ⇒ t3) ->
     hc_i_wt i (t3 ⇒ t4) ->
     hc_wt (HC p t2 m t3 i) (t1 ⇒ t4)
-| fail_wt : forall t1 t2 t4 p l,
-    t2 <> Dyn -> 
+| fail_wt : forall t1 t2 t4 p l I1 I2,
+    t2 <> Dyn -> I1 <> Dyn -> I2 <> Dyn ->
     hc_p_wt p (t1 ⇒ t2) ->
-    hc_wt (Fail p t2 l) (t1 ⇒ t4)
+    t2 !# I1 -> I1 # I2 ->  
+    hc_wt (Fail p t2 (I1, l, I2)) (t1 ⇒ t4)
 with
 hc_m_wt : hc_m -> cty -> Prop :=
 | Id_wt {t} : hc_m_wt Id_hc (t ⇒ t)
@@ -305,9 +306,6 @@ Proof.
     contains_tac. 
     contains_tac. 
   - eauto. 
-    assert (t1 <> Dyn). 
-    intuition. subst.  contradiction H5. eauto. 
-    auto. 
 Qed. 
 
 Lemma mk_hc_wt : forall t1 t2 l h,
