@@ -1,5 +1,6 @@
 Require Import Coq.Init.Datatypes.
 Require Import Coq.Logic.FinFun.
+Require Import Coq.Logic.ProofIrrelevance.
 Require Import LibTactics. 
 Require Import General. 
 Require Import Types. 
@@ -10,8 +11,40 @@ Require Import Omega.
 Require Import SolveMax.
 Open Scope depth_scope. 
 
-Axiom proof_irrelevance :
-  forall (P : Prop) (p q : P), p = q.
+
+Lemma hc_wt_eq {c c' t1 t2} : 
+  forall (p  : hc_wt c  (t1 ⇒ t2))
+         (p' : hc_wt c' (t1 ⇒ t2)),
+     p = p. 
+Proof.
+  intros. 
+  apply proof_irrelevance.
+Qed.
+
+
+Lemma se_wt_eq {c c' t1 t2} : 
+  forall (p  : se_wt c  (t1 ⇒ t2))
+         (p' : se_wt c' (t1 ⇒ t2)),
+     p = p. 
+Proof.
+  intros.
+  apply proof_irrelevance.
+Qed.
+
+Lemma sigma_eq_wt : forall A c c' t1 t2,
+    forall (R : A -> cty -> Prop) f g,
+      c = c' -> 
+      exist (fun c => R c (t1 ⇒ t2)) c  f
+      =
+      exist (fun c => R c (t1 ⇒ t2)) c' g. 
+Proof. 
+  intros. 
+  subst. 
+  f_equal. 
+  apply proof_irrelevance. 
+Qed. 
+
+
 
 (* SearchAbout "Bijective". *)
 
@@ -99,8 +132,7 @@ Fixpoint h2c (hwt : (hc * ty * ty)) : (crcn * ty * ty) :=
   | (h, t1, t2) => (h2c_help h t1 t2, t1, t2)
  end.
 
-Definition s_wt := se_coercion. 
-Hint Unfold s_wt.
+
 
 Fixpoint c2h_help s t1 t2 : hc :=
     match s with
@@ -242,7 +274,7 @@ Instance c_deep : Deep crcn := c_depth.
 Hint Unfold c_deep. 
 
 Lemma c2h_help_lemma : forall c t1 t2,
-    se_coercion c (t1 ⇒ t2) -> 
+    se_wt c (t1 ⇒ t2) -> 
     h2c_help (c2h_help c t1 t2) t1 t2 = c. 
 Proof.
   intros c.
@@ -262,7 +294,7 @@ Proof.
                   end.
       all: simpl.
       all: repeat match goal with
-               | H: se_coercion _ _ |- _ =>
+               | H: se_wt _ _ |- _ =>
                  apply IHn in H; [rewrite H | max_tac]
                end.
       all: eauto.
@@ -271,8 +303,7 @@ Proof.
   max_tac. 
 Qed.   
 
-Lemma c2h_lemma : forall c t1 t2,
-    se_coercion c (t1 ⇒ t2) -> 
+Lemma c2h_lemma : forall c t1 t2, se_wt c (t1 ⇒ t2) -> 
     h2c (c2h (c, t1, t2)) = (c, t1, t2).  
 Proof.
   intros.
@@ -290,8 +321,7 @@ Theorem hc_iso :
       hc_wt h (t1 ⇒ t2) ->
       c2h (h2c (h, t1, t2)) = (h, t1, t2)) 
   /\
-  (forall c t1 t2,
-      se_coercion c (t1 ⇒ t2) ->
+  (forall c t1 t2, se_wt c (t1 ⇒ t2) ->
       h2c (c2h (c, t1, t2)) = (c, t1, t2)).
 Proof.
   split. 
@@ -299,10 +329,7 @@ Proof.
   apply c2h_lemma.
 Qed.
 
-Definition compose_c := compose_coercions. 
-Hint Unfold compose_c. 
-
-
+(*
 Theorem hc_iso_help_respects_compose' : forall n h1 h2 h3 c1 c2 c3 t1 t2 t3,
     [| h1 |] < n ->
     [| h2 |] < n -> 
@@ -312,7 +339,7 @@ Theorem hc_iso_help_respects_compose' : forall n h1 h2 h3 c1 c2 c3 t1 t2 t3,
     h2c_help h1 t1 t2 = c1 ->
     h2c_help h2 t2 t3 = c2 ->
     h2c_help h3 t1 t3 = c3 ->
-    compose_c (c1, c2) c3.
+    compose_s (c1, c2) c3.
 Proof.
   induction n.
   - intuition. 
@@ -332,7 +359,8 @@ Proof.
       * tc_tac; simpl in *; subst; eauto.
       *
 Admitted.
-
+ *)
+(*
 Theorem hc_iso_respects_compose : forall h1 h2 h3 c1 c2 c3 t1 t2 t3,
     hc_wt h1 (t1 ⇒ t2) ->
     hc_wt h2 (t2 ⇒ t3) ->
@@ -340,7 +368,7 @@ Theorem hc_iso_respects_compose : forall h1 h2 h3 c1 c2 c3 t1 t2 t3,
     h2c (h1, t1, t2) = (c1, t1, t2) ->
     h2c (h2, t2, t3) = (c2, t2, t3) ->
     h2c (h3, t1, t3) = (c3, t1, t3) ->
-    compose_c (c1, c2) c3.
+    compose_s (c1, c2) c3.
 Proof.
   intros.
   simpl in *.
@@ -355,10 +383,11 @@ Proof.
   congruence.
   congruence.
 Qed. 
+*)
 
 Lemma h2c_wt_n : forall n h t1 t2,
     [|h|] < n ->
-    hc_wt h (t1 ⇒ t2) -> s_wt (h2c_help h t1 t2) (t1 ⇒ t2).
+    hc_wt h (t1 ⇒ t2) -> se_wt (h2c_help h t1 t2) (t1 ⇒ t2).
 Proof.
   induction n. 
   - intuition. 
@@ -375,7 +404,7 @@ Proof.
 Qed. 
 
 Lemma h2c_wt : forall h t1 t2,
-    hc_wt h (t1 ⇒ t2) -> s_wt (h2c_help h t1 t2) (t1 ⇒ t2).
+    hc_wt h (t1 ⇒ t2) -> se_wt (h2c_help h t1 t2) (t1 ⇒ t2).
 Proof.
   introv wt.
   apply (h2c_wt_n (1 + [|h|])).
@@ -386,9 +415,8 @@ Qed.
 
 Lemma c2h_wt_n : forall n c t1 t2,
     [|c|] < n ->
-    s_wt c (t1 ⇒ t2) -> hc_wt (c2h_help c t1 t2) (t1 ⇒ t2).
+    se_wt c (t1 ⇒ t2) -> hc_wt (c2h_help c t1 t2) (t1 ⇒ t2).
 Proof.
-  unfold s_wt.
   induction n.
   - intuition.
   - introv bnd wt.
@@ -402,7 +430,7 @@ Proof.
     all:
       repeat
         match goal with
-        | H: se_coercion _ _ |- _ =>
+        | H: se_wt _ _ |- _ =>
           apply IHn in H; [idtac | max_tac]
         end.
     all: simpl; eauto.
@@ -411,7 +439,7 @@ Proof.
 Qed. 
 
 Lemma c2h_wt : forall c t1 t2,
-    s_wt c (t1 ⇒ t2) -> hc_wt (c2h_help c t1 t2) (t1 ⇒ t2).
+    se_wt c (t1 ⇒ t2) -> hc_wt (c2h_help c t1 t2) (t1 ⇒ t2).
 Proof.
   intuition.
   apply (c2h_wt_n (1 + [|c|])).
@@ -420,29 +448,16 @@ Proof.
 Qed. 
 
 Definition h2c' {t1 t2} (h : {h : hc | hc_wt h (t1 ⇒ t2)})
-  : {c : crcn | s_wt c (t1 ⇒ t2)} :=
+  : {c : crcn | se_wt c (t1 ⇒ t2)} :=
   exist _ (h2c_help (proj1_sig h) t1 t2)
           (h2c_wt (proj1_sig h) t1 t2 (proj2_sig h)).
 
-Definition c2h' {t1 t2} (c : {c : crcn | s_wt c (t1 ⇒ t2)})
+Definition c2h' {t1 t2} (c : {c : crcn | se_wt c (t1 ⇒ t2)})
   : {h : hc | hc_wt h (t1 ⇒ t2)} :=
   exist _ (c2h_help (proj1_sig c) t1 t2)
           (c2h_wt (proj1_sig c) t1 t2 (proj2_sig c)).
 Hint Unfold h2c' c2h'.
 
-
-Lemma sigma_eq_wt : forall A c c' t1 t2,
-    forall (R : A -> cty -> Prop) f g,
-      c = c' -> 
-      exist (fun c => R c (t1 ⇒ t2)) c  f
-      =
-      exist (fun c => R c (t1 ⇒ t2)) c' g. 
-Proof. 
-  intros. 
-  subst. 
-  f_equal. 
-  apply proof_irrelevance. 
-Qed. 
 
 Theorem hc_iso' : forall t1 t2, Bijective (@h2c' t1 t2). 
 Proof.
@@ -460,12 +475,13 @@ Proof.
   - intros [c cwt]. 
     autounfold.
     simpl.
-    assert (c' : s_wt c (t1 ⇒ t2)) by assumption.
+    assert (c' : se_wt c (t1 ⇒ t2)) by assumption.
     apply c2h_help_lemma in c'.
     apply sigma_eq_wt.
     assumption. 
 Qed.     
 
+(*
 Lemma mk_c_lemma : forall t1 t2 l,
     t1 <> Dyn -> t2 <> Dyn ->
     (t1 !# t2 
@@ -479,71 +495,8 @@ Lemma mk_c_lemma : forall t1 t2 l,
     \/ 
     (t1 # t2 /\ (make_se_coercion (t1, t2, l) (Failc t1 l t2))).
 Admitted. 
+*)
 
-Inductive med_coercion : coercion -> Prop :=
-| MC_Id : forall t,
-    t <> Dyn -> med_coercion (Id_c t)
-| MC_Arr : forall c1 c2,
-    med_coercion (Arr_c c1 c2)
-| MC_Ref : forall c1 c2,
-    med_coercion (Refc c1 c2).
-
- 
-Inductive compose_s : coercion * coercion -> coercion -> Prop :=
-| Comp_Inj_Prj_Fail : forall t1 t2 l s1 s2,
-    make_se_coercion (t1, t2, l) (Failc t1 l t2) ->
-    med_coercion s1 ->
-    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) (Failc t1 l t2)
-| Comp_Inj_Prj_Ok : forall t1 t2 l s1 s2 s3 s4 s5,
-    make_se_coercion (t1, t2, l) s3 ->
-    med_coercion s3 ->
-    med_coercion s1 ->
-    compose_s (s1, s3) s4 -> 
-    compose_s (s4, s2) s5 -> 
-    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) s5
-| Comp_Arr   : forall c1 c2 c3 c4 c5 c6,
-    compose_s (c3, c1) c5 ->
-    compose_s (c2, c4) c6 ->
-    compose_s (c1 →c c2, c3 →c c4) (c5 →c c6)
-| Comp_Ref   : forall c1 c2 c3 c4 c5 c6,
-    compose_s (c3, c1) c5 ->
-    compose_s (c2, c4) c6 ->
-    compose_s (Refc c1 c2, Refc c3 c4) (Refc c5 c6)
-| Compose_Seq_c_L : forall s1 s2 s3 t l,
-    compose_s (s1, s2) s3 -> 
-    compose_s (Prjc t l ;c s1, s2) (Prjc t l ;c s3)
-| Compose_Seq_c_R : forall s1 s2 s3 t,
-    med_coercion s1  ->
-    med_coercion s2  ->
-    compose_s (s1, s2) s3 ->
-    compose_s (s1, s2 ;c Injc t) (s3 ;c Injc t)
-| Compose_Id_L : forall t c,
-    compose_s (ιc t, c) c
-| Compose_Id_R : forall t c,
-    compose_s (c, ιc t) c
-| Compose_Fail_R : forall s1 t l g,
-    med_coercion s1 ->
-    compose_s (s1, Failc t l g) (Failc t l g)
-| Compose_Fail_L    : forall t g l s,
-    compose_s (Failc t l g, s) (Failc t l g).
-
-Lemma compose_s_total : forall c1 c2 t1 t2 t3,
-    s_wt c1 (t1 ⇒ t2) ->
-    s_wt c2 (t2 ⇒ t3) ->
-    exists c3,
-      compose_s (c1, c2) c3
-      /\
-      (forall c3',
-          compose_s (c1, c2) c3' ->
-          c3 = c3')
-      /\
-      s_wt c3 (t1 ⇒ t3).
-  (* A bit of reflection shows that this might
-     not be needed if the compose_hc_m associated
-     right in all cases. *)
-Admitted. 
-  
-Hint Constructors med_coercion compose_s.
 
 Lemma mk_hc_to_mk_s : forall t1 t2 l h,
     mk_hc (t1, t2, l) h ->
@@ -681,15 +634,16 @@ Proof.
                eapply (IHn c) in H; [idtac | max_tac | idtac ..]
              end.
       all: try solve[autounfold; simpl in *; max_tac].
-      autounfold in *.
-      simpl in *.
-      
-
-      max_tac. autounfold in *. max_tac. eauto.  
-      
+    - tc_tac.
+      all: autounfold in *.
+      all: simpl in *.
+      all: max_tac. 
   }
-  
-(* In the next proof we commonly need to have a
+  apply (H (1 + [|h|])).
+  auto. 
+Qed.
+
+  (* In the next proof we commonly need to have a
    knowledge of the height of calls to h2c_help calls *)
 (*
 Ltac eq_h2c_help:=
@@ -727,6 +681,8 @@ Proof.
   max_tac. 
 Qed.
 
+
+(*
 Ltac clear_except H :=
   let H:=type of H in
   repeat match goal with
@@ -736,7 +692,7 @@ Ltac clear_except H :=
            | _ => clear H'
            end
          end. 
-
+*)
 
 
 Ltac one_will_do :=
@@ -876,7 +832,7 @@ Lemma h2c_respects_compose'' : forall n h1 h2 h3 t1 t2 t3,
                h2c_help h2 t2 t3)
               (h2c_help h3 t1 t3)
     /\
-    s_wt (h2c_help h3 t1 t3)
+    se_wt (h2c_help h3 t1 t3)
          (t1 ⇒ t3)
     /\
     [|h3|] < n.
@@ -884,10 +840,10 @@ Proof.
   induction n.
   - intuition. 
   - introv hw1 hw2 cp b1 b2.
-    assert (cw1 : s_wt (h2c_help h1 t1 t2) (t1 ⇒ t2)).
-    { unfold s_wt. apply h2c_wt. assumption. }
-    assert (cw2 : s_wt (h2c_help h2 t2 t3) (t2 ⇒ t3)).
-    { unfold s_wt. apply h2c_wt. assumption. }
+    assert (cw1 : se_wt (h2c_help h1 t1 t2) (t1 ⇒ t2)).
+    { apply h2c_wt. assumption. }
+    assert (cw2 : se_wt (h2c_help h2 t2 t3) (t2 ⇒ t3)).
+    { apply h2c_wt. assumption. }
     assert (hwb3 : hc_wt h3 (t1 ⇒ t3)
                   /\ [|h3|] < S n ).
     { edestruct (compose_hc_total_deterministic_welltyped (S n)) as [f _]. 
@@ -899,8 +855,8 @@ Proof.
       rewrite <- (fn h3); [idtac | eauto].
       split; [assumption | max_tac]. }
     destruct hwb3 as [hw3 b3].
-    assert (cw3 : s_wt (h2c_help h3 t1 t3) (t1 ⇒ t3)).
-    { subst. unfold s_wt. apply h2c_wt. assumption. }        
+    assert (cw3 : se_wt (h2c_help h3 t1 t3) (t1 ⇒ t3)).
+    { subst. apply h2c_wt. assumption. }        
     split; [idtac | split; [exact cw3 | exact b3]]. 
     inverts cp; inverts hw1; inverts hw2.
     + tc_tac; simpl in *; eauto. 
@@ -996,12 +952,12 @@ Proof.
       Transparent depth. 
       all: h2c_depth_tac. 
       all: repeat compose_h2c_tac. 
-      all: try solve[tc_tac; simpl in *; clear IHn; time eauto 7].
-    + h2c_mk_hc_tac.
-      all: try solve[tc_tac; simpl in *; clear IHn; time eauto].
-    + all: try solve[tc_tac; simpl in *; clear IHn; time eauto].
-    + all: try solve[tc_tac; simpl in *; clear IHn; time eauto].
-    + all: try solve[tc_tac; simpl in *; clear IHn; time eauto].
+      all: try solve[tc_tac; simpl in *; clear IHn; eauto 7].
+    + h2c_mk_hc_tac.                                
+      all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
+    + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
+    + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
+    + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
       Hint Resolve make_se_coercion_wt.
       Ltac hack_tac :=
         let rec dtr m1 m2 :=
@@ -1009,7 +965,7 @@ Proof.
             let fn:=fresh in
             let wt:=fresh in
             let m3:=fresh in
-            edestruct (compose_s_total m1 m2)
+            edestruct (compose_s_total_fun_wt m1 m2)
               as [m3 [cp [fn wt]]]; [eauto|eauto|idtac]
         in match goal with
            | H: make_se_coercion _ ?m2 |- compose_s (Prjc _ _ ;c (?m1 ;c _), _ ) _ =>
@@ -1019,7 +975,7 @@ Proof.
            end.
 
     + h2c_mk_hc_tac.
-      * all: try solve[tc_tac; simpl in *; clear IHn; time eauto].
+      * all: try solve[tc_tac; simpl in *; clear IHn; eauto].
       * tc_tac.
         all: simpl in *.
         all: inverts cw1; inverts cw2; inverts cw3;
@@ -1032,7 +988,7 @@ Proof.
         all: eauto.
         all:
           match goal with
-          | H: s_wt _ _ |- _ => inverts H
+          | H: se_wt _ _ |- _ => inverts H
           end;
           repeat
             match goal with
@@ -1058,7 +1014,7 @@ Proof.
         all: eauto.
         all:
           match goal with
-          | H: s_wt _ _ |- _ => inverts H
+          | H: se_wt _ _ |- _ => inverts H
           end;
           repeat
             match goal with
@@ -1095,9 +1051,9 @@ Theorem h2c_respects_compose : forall t1 t2 t3,
     forall (hwt1 : {h : hc   | hc_wt h (t1 ⇒ t2)})
            (hwt2 : {h : hc   | hc_wt h (t2 ⇒ t3)})
            (hwt3 : {h : hc   | hc_wt h (t1 ⇒ t3)})
-           (cwt1 : {c : crcn |  s_wt c (t1 ⇒ t2)})
-           (cwt2 : {c : crcn |  s_wt c (t2 ⇒ t3)})
-           (cwt3 : {c : crcn |  s_wt c (t1 ⇒ t3)}),
+           (cwt1 : {c : crcn | se_wt c (t1 ⇒ t2)})
+           (cwt2 : {c : crcn | se_wt c (t2 ⇒ t3)})
+           (cwt3 : {c : crcn | se_wt c (t1 ⇒ t3)}),
       cwt1 = h2c' hwt1 -> cwt2 = h2c' hwt2 -> cwt3 = h2c' hwt3 -> 
       compose_hc (proj1_sig hwt1, proj1_sig hwt2) (proj1_sig hwt3) ->
       compose_s  (proj1_sig cwt1, proj1_sig cwt2) (proj1_sig cwt3).

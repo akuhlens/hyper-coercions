@@ -61,16 +61,16 @@ Proof. eauto. Qed.
 
 
 
-Inductive se_coercion : coercion -> cty -> Prop :=
-(* | Se_Id {t} : se_coercion (ιc t) (t ⇒ t) *) 
+Inductive se_wt : coercion -> cty -> Prop :=
+(* | Se_Id {t} : se_wt (ιc t) (t ⇒ t) *) 
 | Se_Seq  : forall t1 t2 l c,
     t1 <> Dyn -> 
     se_inj_coercion c (t1 ⇒ t2) -> 
-    se_coercion (Prjc t1 l ;c c) (Dyn ⇒ t2)
+    se_wt (Prjc t1 l ;c c) (Dyn ⇒ t2)
 | Se_Inj  : forall t1 t2 c,
 (*  t1 <> Dyn -> *)
     se_inj_coercion c (t1 ⇒ t2) -> 
-    se_coercion c (t1 ⇒ t2)
+    se_wt c (t1 ⇒ t2)
 with se_inj_coercion : coercion -> cty -> Prop := 
 | Se_Inj_Fail : forall t1 t2 I1 I2 l,
     (* This is the moral equivalent of the fail type rule 
@@ -93,21 +93,21 @@ with se_med_coercion : coercion -> cty -> Prop :=
 | Se_Med_Id : forall t,
          se_med_coercion (ιc t) (t ⇒ t)
 | Se_Med_Ref  : forall t1 t2 c1 c2,
-    se_coercion c1 (t2 ⇒ t1) ->
-    se_coercion c2 (t1 ⇒ t2) ->
+    se_wt c1 (t2 ⇒ t1) ->
+    se_wt c2 (t1 ⇒ t2) ->
     se_med_coercion (Refc c1 c2) (Ref t1 ⇒ Ref t2)
 | Se_Med_Arr : forall t1 t2 g1 g2 c1 c2,
-    se_coercion c1 (g1 ⇒ t1) ->
-    se_coercion c2 (t2 ⇒ g2) ->
+    se_wt c1 (g1 ⇒ t1) ->
+    se_wt c2 (t2 ⇒ g2) ->
     se_med_coercion (c1 →c c2) (t1 → t2 ⇒ g1 → g2). 
 
 
 
 
-Hint Constructors se_coercion se_inj_coercion se_med_coercion.
+Hint Constructors se_wt se_inj_coercion se_med_coercion.
 
 Scheme se_ind :=
-  Induction for se_coercion Sort Prop
+  Induction for se_wt Sort Prop
 with se_inj_ind :=
   Induction for se_inj_coercion Sort Prop
 with se_med_ind :=
@@ -410,7 +410,7 @@ Proof. induction t; intros; cbn; repeat rewrite beq_ty_true; auto. Qed. Qed.
 *)
 
 Lemma make_se_coercion_wt : forall c t1 t2 l,
-    make_se_coercion (t1, t2, l) c -> se_coercion c (t1 ⇒ t2). 
+    make_se_coercion (t1, t2, l) c -> se_wt c (t1 ⇒ t2). 
 Proof.     
   induction c; intros t1 t2 l' H; inverts H;
     repeat match goal with
@@ -546,6 +546,7 @@ Proof.
   assumption.
 Qed. 
   
+(*
 Inductive compose_coercions : coercion * coercion -> coercion -> Prop :=
 | Comp_Inj_Prj : forall t g l s1 s2 s3 s4 s5,
     make_coercion (t, g, l) s3 ->
@@ -582,3 +583,69 @@ Proof.
   intros c1 c2 t1 t2 t3 [wt_c1 wt_c2].
   inversion wt_c1; inversion wt_c2; subst; eauto. 
 Qed. 
+*)
+
+
+
+Inductive med_coercion : coercion -> Prop :=
+| MC_Id : forall t,
+    t <> Dyn -> med_coercion (Id_c t)
+| MC_Arr : forall c1 c2,
+    med_coercion (Arr_c c1 c2)
+| MC_Ref : forall c1 c2,
+    med_coercion (Refc c1 c2).
+
+
+Inductive compose_s : coercion * coercion -> coercion -> Prop :=
+| Comp_Inj_Prj_Fail : forall t1 t2 l s1 s2,
+    make_se_coercion (t1, t2, l) (Failc t1 l t2) ->
+    med_coercion s1 ->
+    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) (Failc t1 l t2)
+| Comp_Inj_Prj_Ok : forall t1 t2 l s1 s2 s3 s4 s5,
+    make_se_coercion (t1, t2, l) s3 ->
+    med_coercion s3 ->
+    med_coercion s1 ->
+    compose_s (s1, s3) s4 -> 
+    compose_s (s4, s2) s5 -> 
+    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) s5
+| Comp_Arr   : forall c1 c2 c3 c4 c5 c6,
+    compose_s (c3, c1) c5 ->
+    compose_s (c2, c4) c6 ->
+    compose_s (c1 →c c2, c3 →c c4) (c5 →c c6)
+| Comp_Ref   : forall c1 c2 c3 c4 c5 c6,
+    compose_s (c3, c1) c5 ->
+    compose_s (c2, c4) c6 ->
+    compose_s (Refc c1 c2, Refc c3 c4) (Refc c5 c6)
+| Compose_Seq_c_L : forall s1 s2 s3 t l,
+    compose_s (s1, s2) s3 -> 
+    compose_s (Prjc t l ;c s1, s2) (Prjc t l ;c s3)
+| Compose_Seq_c_R : forall s1 s2 s3 t,
+    med_coercion s1  ->
+    med_coercion s2  ->
+    compose_s (s1, s2) s3 ->
+    compose_s (s1, s2 ;c Injc t) (s3 ;c Injc t)
+| Compose_Id_L : forall t c,
+    compose_s (ιc t, c) c
+| Compose_Id_R : forall t c,
+    compose_s (c, ιc t) c
+| Compose_Fail_R : forall s1 t l g,
+    med_coercion s1 ->
+    compose_s (s1, Failc t l g) (Failc t l g)
+| Compose_Fail_L    : forall t g l s,
+    compose_s (Failc t l g, s) (Failc t l g).
+
+Hint Constructors med_coercion compose_s.
+
+
+Axiom compose_s_total_fun_wt : forall c1 c2 t1 t2 t3,
+    se_wt c1 (t1 ⇒ t2) ->
+    se_wt c2 (t2 ⇒ t3) ->
+    exists c3,
+      compose_s (c1, c2) c3
+      /\
+      (forall c3',
+          compose_s (c1, c2) c3' ->
+          c3 = c3')
+      /\
+      se_wt c3 (t1 ⇒ t3).
+
