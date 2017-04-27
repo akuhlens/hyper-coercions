@@ -580,6 +580,43 @@ Lemma mk_s_depth : forall t1 t2 l h,
 Admitted. 
 *)
 
+      Ltac clear_except H :=
+        let H:=type of H in
+        repeat match goal with
+               | H': ?h |- _ =>
+                 match h with
+                 | H => fail 1
+                 | _ => clear H'
+                 end
+               end.
+      Ltac clear_unrelated H :=
+        repeat match goal with
+               | H': ?h |- _ =>
+                 match h with
+                 | context[H] => fail 1
+                 | _ => clear H
+                 end
+               end.
+      Lemma le_max3 : forall n0 n1 n2 n3,
+          n0 <= max n1 (max n2 n3) ->
+          n0 <= n1 \/ n0 <= n2 \/ n0 <= n3.
+      Proof.
+        max_tac. 
+      Qed.
+      Ltac shortcut_max :=
+        repeat
+          match goal with
+          | H: ?n0 <= max ?n1 (max ?n2 ?n3) |- _ => 
+            let h1:=fresh in
+            let h2:=fresh in
+               eapply le_max3 in H;
+               edestruct H as [h1 | [h1 | h1]];
+               clear H
+          | |- S _ <= S _ => apply le_S 
+          | |- max ?c1 ?c2 <= _ => 
+            eapply max_le_strategy;
+            split
+          end.
 
 Lemma h2c_preserves_depth' : forall h t1 t2,
     hc_wt h (t1 ⇒ t2) ->
@@ -599,12 +636,32 @@ Proof.
            | H: hc_wt ?c _ |- _ =>
              eapply (IHn c) in H; [idtac | max_tac | idtac ..]
            end.
-    * clear IHn; clear H; max_tac.
-    * clear IHn; clear H; max_tac. 
-    * clear IHn; clear H; max_tac.
-    * clear IHn; clear H; max_tac.
-    * clear IHn; clear H; max_tac. 
-    * clear IHn; clear H; max_tac. 
+    all: clear IHn; clear H.
+    * max_tac. 
+    * max_tac. 
+    * max_tac. 
+    * max_tac. 
+    * autounfold in *; simpl in *. shortcut_max.
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      all: max_tac. 
+    * autounfold in *; simpl in *. shortcut_max. 
+      tc_tac. all: max_tac. 
+    }
+  eapply (H (1+[|h|])).
+  eauto.
 Qed.
    
 Lemma h2c_preserves_depth : forall h t1 t2,
