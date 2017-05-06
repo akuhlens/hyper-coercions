@@ -267,12 +267,13 @@ Proof.
     inverts H16wt;
       inverts keep wt1;
       inverts keep wt2;
-      edestruct (IHm m1 m4) as [m3 [cmp3 [cfn [wt3 db3]]]].
+      edestruct (IHm m4 m2) as [m3 [cmp3 [cfn [wt3 db3]]]].
     eauto. 
-    eauto. 
+    eauto.
     max_tac.
-    max_tac. 
-    edestruct (IHm m3 m2) as [m7 [cmp7 [cfn7 [wt7 db7]]]]. 
+    max_tac.
+    determinism_tac. 
+    edestruct (IHm m1 m3) as [m7 [cmp7 [cfn7 [wt7 db7]]]]. 
     eauto. 
     eauto. 
     max_tac.
@@ -284,7 +285,12 @@ Proof.
       all: determinism_tac. 
       all: congruence. 
     + eauto. 
-    + eauto. 
+    + clear db1.
+      clear db2.
+      clear IHm.
+      clear H4.
+      clear H14.
+      max_tac. 
       Unshelve. 
       all: assumption. 
 Qed. 
@@ -440,8 +446,8 @@ Ltac comp_tac :=
     |- context[compose_hc (HC _ _ ?m1 _ _, HC _ _ ?m2 _ _) _] =>
     let m4:=fresh in
     let m5:=fresh in
-    comp_exists m1 m3 m4;
-    comp_exists m4 m2 m5
+    comp_exists m3 m2 m4;
+    comp_exists m1 m4 m5
   | |- context[compose_hc (HC _ _ ?m1 _ inj_mt, 
                            HC prj_mt _ ?m2 _ _) _] =>
     let m3:=fresh in
@@ -476,6 +482,16 @@ Lemma sic_not_dyn_r : forall t1 t2, t1 # t2 -> t2 <> Dyn.
 Proof. eauto. Qed. 
 Hint Resolve sic_not_dyn_r. 
 
+Lemma L10 : forall p1 t1 m1 t2 i1 n p2 t3 m2 i2 m3 m4 t4,
+    hc_depth (HC p1 t1 m1 t2 i1) < S n -> 
+    hc_depth (HC p2 t3 m2 t4 i2) < S n ->
+    hc_depth (HC prj_mt t2 m3 t3 inj_mt) <= max (ty_depth t2) (ty_depth t3) ->
+    hc_m_depth m4 <= max (hc_m_depth m3) (hc_m_depth m2) ->
+    hc_m_depth m4 <= n.
+Proof. max_tac. Qed. 
+Hint Resolve L10. 
+
+
 Theorem compose_hc_mostly_correct :
   forall n h1 h2 t1 t2 t3,
     (forall (m1 m2 : hc_m) (t1 t2 t3 : ty),
@@ -508,9 +524,9 @@ Proof.
   match goal with
   | H1: hc_wt _ _, H2: hc_wt _ _ |- _ => inverts keep H1; inverts keep H2
   end. 
-  all: repeat match goal with
-              | H: hc_m_wt _ _ |- _ => inverts H
-              end.
+  (* all: repeat match goal with
+     | H: hc_m_wt _ _ |- _ => inverts H
+     end. *)
   all: 
     try 
       match goal with
@@ -531,88 +547,63 @@ Proof.
       | H: _ → _ = _ → _ |- _ => inverts H
       | H: (Ref _) = (Ref _) |- _ => inverts H
       end.
-  all: subst. 
-  all: try solve [tc_tac; 
-                  try mk_hc_tac;
-                  try comp_tac;
-                  eauto 6].
-  (* 11 goals left *)
-  - exists; split; [idtac | split; idtac].
-    + eauto.
-    + introv c. inverts c.
-      all: tc_tac.
-      all: eauto.
+  all: subst.
+  - comp_tac. eauto 6. 
+  - tc_tac. all: eauto. 
+  - tc_tac. all: eauto.
+  - mk_hc_tac.
+    + comp_tac. eauto 6.
     + eauto. 
-  - tc_tac_full. 
-    all: eexists; split; [idtac | split; [idtac | idtac]]. 
-    all: eauto. 
-    all: introv c; inverts c; eauto. 
-  - mk_hc_tac.  
-    + all: eexists; split; [idtac | split; [idtac | split]]. 
-      * eauto.
-      * introv c. inverts c; tc_tac; try congruence; determinism_tac.
-      * tc_tac. all: eauto.
-      * max_tac. 
-    + eexists; split; [idtac | split; [idtac | split]]. 
-      * eauto.
-      * introv c; inverts c; determinism_tac; eauto; congruence. 
-      * eauto. 
-      * max_tac. 
-  - eexists; split; [idtac | split; [idtac | split]]. 
-    + eauto. 
-    + introv c; inverts c; eauto.
-    + eauto.
-    + max_tac.
-  - mk_hc_tac. 
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * inverts wt2. tc_tac; eauto.
-      * max_tac. 
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c;try contradiction; determinism_tac; eauto. 
-      * eauto. 
-      * max_tac. 
-  - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-  - mk_hc_tac. 
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      *  tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-    + eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; determinism_tac; eauto. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * destruct t6.
-        all: try solve[contradiction]. 
-        all: try solve[contradiction H; eauto].
-        all: max_tac. 
-    - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-    - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac.
-    - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac. 
-    - eexists; split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv c; inverts c; try contradiction; eauto; determinism_tac. 
-      * tc_tac; constructor; try congruence; eauto. 
-      * max_tac.
+  - exists. 
+    split. 
+    eauto. 
+    split. 
+    introv c. inverts c; tc_tac; determinism_tac; try congruence. 
+    split. 
+    tc_tac; eauto. 
+    max_tac. 
+  - tc_tac; eauto 6. 
+    exists. 
+    split. 
+    eauto. 
+    split. 
+    introv c. inverts c; tc_tac; determinism_tac; try congruence. 
+    eauto. 
+  - tc_tac. 
+  - mk_hc_tac.
+    + exists.
+      split.
+      eauto.
+      split.
+      introv c. inverts c; tc_tac; determinism_tac; try congruence. 
+      split.
+      eauto.
+      tc_tac; eauto. 
+      max_tac.
+    + exists.
+      split.
+      eauto.
+      split.
+      introv c. inverts c; tc_tac; determinism_tac; try congruence. 
+      split.
+      tc_tac; eauto.
+      max_tac.
+  - exists.
+    split.
+    eauto. 
+    split. 
+    introv c. inverts c; tc_tac; determinism_tac; try congruence.
+    split.
+    tc_tac; eauto. 
+    max_tac. 
+  - exists.
+    split.
+    eauto. 
+    split. 
+    introv c. inverts c; tc_tac; determinism_tac; try congruence. 
+    split. 
+    eauto. 
+    eauto. 
 Qed.     
 
 Hint Resolve compose_hc_mostly_correct.  
@@ -645,13 +636,121 @@ Theorem compose_hc_m_mostly_correct :
       /\
       hc_depth h3 <= Init.Nat.max (hc_depth h1) (hc_depth h2). 
 Proof.
-  intuition.
-  assert (hc_depth h1 <= S n). auto. 
-  assert (hc_depth h2 <= S n). auto. 
-  eauto. 
+  introv IHm w1 w2 b1 b2. 
+  assert (bound: forall h n, 1 + hc_depth h <= S n -> hc_depth h < S n). auto.  
+  eapply compose_hc_mostly_correct.
+  exact IHm.
+  exact w1.
+  exact w2. 
+  apply (bound h1 n b1).
+  apply (bound h2 n b2). 
 Qed.
 
 Hint Resolve compose_hc_m_mostly_correct. 
+
+Lemma compose_hc_m_type_preserving_deterministic_function: forall n m1 m2 t1 t2 t3,
+    hc_m_wt m1 (t1 ⇒ t2) ->
+    hc_m_wt m2 (t2 ⇒ t3) ->
+    [|m1|] <= n ->
+    [|m2|] <= n ->
+    exists m3,
+      compose_hc_m (m1, m2) m3
+      /\
+      (forall m3', compose_hc_m (m1, m2) m3' -> m3 = m3')
+      /\
+      hc_m_wt m3 (t1 ⇒ t3)
+      /\ 
+      [|m3|] <= max [|m1|] [|m2|].
+Proof.
+  induction n. 
+  (* base case for (exist h3, ...) vacuously true *)
+  - (* base case for exist m3, ... *)
+    intuition.
+    match goal with
+      | H1: hc_m_wt _ _, H2: hc_m_wt _ _ |- _ =>
+        inverts keep H1; inverts keep H2
+      end.
+      all: autounfold in *. 
+      all: match goal with
+           | H1: hc_m_depth _ <= 0, H2: hc_m_depth _ <= 0 |- _ =>
+             inverts H1; inverts H2
+           end.
+      reconstruct. 
+    - introv w1 w2 b1 b2. inverts w1; inverts w2.
+      + eauto. 
+      + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. reflexivity. 
+        * eauto. 
+        * eauto. 
+      + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. reflexivity. 
+        * eauto. 
+        * eauto. 
+      + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. reflexivity. 
+        * eauto. 
+        * eauto. 
+      + edestruct compose_hc_m_mostly_correct as [m1' [cmp1' [cfn1' [wt1' db1']]]]. 
+        eauto.      
+        exact H4. 
+        exact H2. 
+        eauto. 
+        eauto. 
+        edestruct compose_hc_m_mostly_correct as [m2' [cmp2' [cfn2' [wt2' db2']]]]. 
+        eauto.
+        exact H3. 
+        exact H6.
+        eauto.
+        eauto. 
+        eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. determinism_tac. reflexivity. 
+        * eauto. 
+        * max_tac. 
+      + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. reflexivity. 
+        * eauto. 
+        * eauto. 
+      + edestruct compose_hc_m_mostly_correct as [m1' [cmp1' [cfn1' [wt1' db1']]]]. 
+        eauto. 
+        exact H4. 
+        exact H2. 
+        eauto. 
+        eauto. 
+        edestruct compose_hc_m_mostly_correct as [m2' [cmp2' [cfn2' [wt2' db2']]]]. 
+        eauto.
+        exact H3. 
+        exact H5.
+        eauto.
+        eauto. 
+        eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
+        * eauto. 
+        * introv cmp'. inverts cmp'. determinism_tac. reflexivity. 
+        * eauto. 
+        * max_tac.
+Qed. 
+
+Theorem compose_hc_m_total_deterministic_type_preserving :
+    forall m1 m2 t1 t2 t3,
+        hc_m_wt m1 (t1 ⇒ t2) ->
+        hc_m_wt m2 (t2 ⇒ t3) ->
+        exists m3,
+          compose_hc_m (m1, m2) m3
+          /\
+          (forall m3', compose_hc_m (m1, m2) m3' -> m3 = m3')
+          /\
+          hc_m_wt m3 (t1 ⇒ t3).
+  intros. 
+  edestruct (compose_hc_m_type_preserving_deterministic_function
+               (1+[|m1|]+[|m2|]) m1 m2 t1 t2 t3 H H0) as [m3 [c123 [c12fn [m3wt b3]]]].
+  omega. 
+  omega.
+  eauto. 
+Qed.   
 
 Theorem compose_hc_total_deterministic_welltyped :
   forall n,
@@ -672,91 +771,46 @@ Theorem compose_hc_total_deterministic_welltyped :
           /\
           (* There is a bound on the depth of coercions
              returned from composition. Needed for IH. *)
-          [|h3|] <= max [|h1|] [|h2|])
-    /\
-    (forall m1 m2 t1 t2 t3,
-        hc_m_wt m1 (t1 ⇒ t2) ->
-        hc_m_wt m2 (t2 ⇒ t3) ->
-        [|m1|] <= n ->
-        [|m2|] <= n ->
-        exists m3,
-          compose_hc_m (m1, m2) m3
-          /\
-          (forall m3', compose_hc_m (m1, m2) m3' -> m3 = m3')
-          /\
-          hc_m_wt m3 (t1 ⇒ t3)
-          /\ 
-          [|m3|] <= max [|m1|] [|m2|]).
+          [|h3|] <= max [|h1|] [|h2|]).
 Proof. 
-  induction n; split; intuition.
-  (* base case for (exist h3, ...) vacuously true *)
-  - (* base case for exist m3, ... *)
-    match goal with
-    | H1: hc_m_wt _ _, H2: hc_m_wt _ _ |- _ =>
-      inverts keep H1; inverts keep H2
-    end.
-    all: autounfold in *. 
-    all: match goal with
-         | H1: hc_m_depth _ <= 0, H2: hc_m_depth _ <= 0 |- _ =>
-           inverts H1; inverts H2
-         end.
-    reconstruct. 
-  - (* inductive step for exists h3, ... *)
-    eapply compose_hc_mostly_correct; eauto. 
-  - inverts H1; inverts H2.
-    + eauto. 
-    + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. reflexivity. 
-      * eauto. 
-      * eauto. 
-    + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. reflexivity. 
-      * eauto. 
-      * eauto. 
-    + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. reflexivity. 
-      * eauto. 
-      * eauto. 
-    + edestruct compose_hc_m_mostly_correct as [m1' [cmp1' [cfn1' [wt1' db1']]]]. 
-      eauto. 
-      exact H7. 
-      exact H8. 
-      eauto. 
-      eauto. 
-      edestruct compose_hc_m_mostly_correct as [m2' [cmp2' [cfn2' [wt2' db2']]]]. 
-      eauto.
-      exact H9. 
-      exact H11.
-      eauto.
-      eauto. 
-      eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. determinism_tac. reflexivity. 
-      * eauto. 
-      * max_tac. 
-    + eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. reflexivity. 
-      * eauto. 
-      * eauto. 
-    + edestruct compose_hc_m_mostly_correct as [m1' [cmp1' [cfn1' [wt1' db1']]]]. 
-      eauto. 
-      exact H7. 
-      exact H8. 
-      eauto. 
-      eauto. 
-      edestruct compose_hc_m_mostly_correct as [m2' [cmp2' [cfn2' [wt2' db2']]]]. 
-      eauto.
-      exact H9. 
-      exact H10.
-      eauto.
-      eauto. 
-      eexists. split; [idtac | split; [idtac | split; [idtac | idtac]]]. 
-      * eauto. 
-      * introv cmp'. inverts cmp'. determinism_tac. reflexivity. 
-      * eauto. 
-      * max_tac. 
-Qed.         
+  intros. 
+  eapply compose_hc_mostly_correct. 
+  apply (compose_hc_m_type_preserving_deterministic_function n).
+  all: eauto. 
+Qed. 
+
+Theorem compose_hc_type_preserving_deterministic_function :
+  forall h1 h2 t1 t2 t3,
+    hc_wt h1 (t1 ⇒ t2) ->
+    hc_wt h2 (t2 ⇒ t3) ->
+    exists h3,
+      (* Compose is total *)
+      compose_hc (h1, h2) h3
+      /\
+      (* Compose is a function *)
+      (forall h3', compose_hc (h1, h2) h3' -> h3 = h3')
+      /\
+      (* Compose is well-typed *)
+      hc_wt h3 (t1 ⇒ t3). 
+Proof. 
+  intros. 
+  edestruct (compose_hc_total_deterministic_welltyped (1 + [|h1|] + [|h2|]))
+    as [h3 [cp [fn [wt b]]]]. 
+  exact H.
+  exact H0.
+  all: try max_tac.
+  eauto. 
+Qed. 
+
+Corollary compose_hc_wt: forall h1 h2 h3 t1 t2 t3,
+    hc_wt h1 (t1 ⇒ t2) ->
+    hc_wt h2 (t2 ⇒ t3) ->
+    compose_hc (h1, h2) h3 ->
+    hc_wt h3 (t1 ⇒ t3).
+Proof.
+  introv w1 w2 c. 
+  edestruct compose_hc_type_preserving_deterministic_function as [h3' [c' [cf w3']]].
+  exact w1. exact w2.
+  rewrite (cf h3) in *.
+  all: assumption. 
+Qed. 

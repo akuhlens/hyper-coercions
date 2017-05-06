@@ -1,30 +1,37 @@
+.PHONY: plugin install clean
+
+# Here is a hack to make $(eval $(shell work
+# (copied from coq_makefile generated stuff):
+# define donewline
 
 
-all: HCoercionsIso.vo
+# endef
 
-LibTactics.vo: LibTactics.v
-	coqc LibTactics.v
+# includecmdwithout@ = $(eval $(subst @,$(donewline),$(shell { $(1) | tr -d '\r' | tr '\n' '@'; })))
+# $(call includecmdwithout@,$(COQBIN)coqtop -config)
 
-General.vo: General.v LibTactics.vo
-	coqc General.v
+all: Makefile.coq
+	$(MAKE) -f Makefile.coq
 
-SolveMax.vo: SolveMax.v General.vo
-	coqc SolveMax.v
+Makefile.coq: Make
+	coq_makefile -f _CoqProject -o Makefile.coq
 
-Types.vo: Types.v General.vo
-	coqc Types.v
 
-Coercions.vo: Coercions.v Types.vo SolveMax.vo
-	coqc Coercions.v
+distclean:
+	find . -name "*.vo" -print -delete
+	find . -name "*.glob" -print -delete
+	find . -name "*.d" -print -delete
+	find . -name "*.o" -print -delete
+	find . -name "*.cmi" -print -delete
+	find . -name "*.cmx" -print -delete
+	find . -name "*.cmxs" -print -delete
+	find . -name "*.cmo" -print -delete
+	find . -name "*.bak" -print -delete
+	find . -name "*~" -print -delete
 
-HCoercions.vo: HCoercions.v Coercions.vo SolveMax.vo
-	coqc HCoercions.v
+# want to be able to distribute with a makefile
+clean: distclean 
+	rm -f Makefile.coq
 
-HCoercionsCompose.vo: HCoercionsCompose.v HCoercions.vo
-	coqc HCoercionsCompose.v
-
-HCoercionsIso.vo: HCoercionsIso.v HCoercionsCompose.vo
-	coqc HCoercionsIso.v
-
-clean:
-	$(RM) *.vo *.glob
+bc:
+	coqwc *.v

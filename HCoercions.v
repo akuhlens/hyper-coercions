@@ -543,12 +543,21 @@ Inductive compose_hc : (hc * hc) -> hc -> Prop :=
    compose_hc_m (m1, m2) m3 ->
    compose_hc (HC p1 t11 m1 t inj_mt, HC prj_mt t m2 t22 i2)
               (HC p1 t11 m3 t22 i2)
+(* |Comp_hc_inj_prj_ok {p1 m1 l m2 i2 t1 t2 t3 t4 m3 m4 m5}: *)
+(*    t2 <> Dyn -> *)
+(*    t3 <> Dyn -> *)
+(*    mk_hc (t2, t3, l) (HC prj_mt t2 m3 t3 inj_mt) -> *)
+(*    compose_hc_m (m1, m3) m4 -> *)
+(*    compose_hc_m (m4, m2) m5 -> *)
+(*    compose_hc (HC p1 t1 m1 t2 inj, HC (prj l) t3 m2 t4 i2) *)
+(*               (HC p1 t1 m5 t4 i2) *)
 |Comp_hc_inj_prj_ok {p1 m1 l m2 i2 t1 t2 t3 t4 m3 m4 m5}:
    t2 <> Dyn ->
    t3 <> Dyn ->
    mk_hc (t2, t3, l) (HC prj_mt t2 m3 t3 inj_mt) ->
-   compose_hc_m (m1, m3) m4 ->
-   compose_hc_m (m4, m2) m5 ->
+   (* Reassociate compose to make it more similar to se_compose *)
+   compose_hc_m (m3, m2) m4 ->
+   compose_hc_m (m1, m4) m5 ->
    compose_hc (HC p1 t1 m1 t2 inj, HC (prj l) t3 m2 t4 i2)
               (HC p1 t1 m5 t4 i2)
 |Comp_hc_inj_prj_fail {p1 m1 l m2 i2 t2 t3 t1 t4 nfo}:
