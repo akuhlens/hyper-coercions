@@ -1,23 +1,14 @@
-.PHONY: plugin install clean
-
-# Here is a hack to make $(eval $(shell work
-# (copied from coq_makefile generated stuff):
-# define donewline
-
-
-# endef
-
-# includecmdwithout@ = $(eval $(subst @,$(donewline),$(shell { $(1) | tr -d '\r' | tr '\n' '@'; })))
-# $(call includecmdwithout@,$(COQBIN)coqtop -config)
+.PHONY: all clean bc validate
 
 all: Makefile.coq
 	$(MAKE) -f Makefile.coq
 
-Makefile.coq: Make
+Makefile.coq: _CoqProject
 	coq_makefile -f _CoqProject -o Makefile.coq
 
 
-distclean:
+# want to be able to distribute with a makefile
+clean:
 	find . -name "*.vo" -print -delete
 	find . -name "*.glob" -print -delete
 	find . -name "*.d" -print -delete
@@ -28,10 +19,11 @@ distclean:
 	find . -name "*.cmo" -print -delete
 	find . -name "*.bak" -print -delete
 	find . -name "*~" -print -delete
-
-# want to be able to distribute with a makefile
-clean: distclean 
 	rm -f Makefile.coq
 
 bc:
 	coqwc *.v
+
+
+validate: Makefile.coq
+	$(MAKE) -f Makefile.coq validate

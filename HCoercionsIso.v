@@ -533,43 +533,43 @@ Lemma mk_s_depth : forall t1 t2 l h,
 Admitted. 
 *)
 
-      Ltac clear_except H :=
-        let H:=type of H in
-        repeat match goal with
-               | H': ?h |- _ =>
-                 match h with
-                 | H => fail 1
-                 | _ => clear H'
-                 end
-               end.
-      Ltac clear_unrelated H :=
-        repeat match goal with
-               | H': ?h |- _ =>
-                 match h with
-                 | context[H] => fail 1
-                 | _ => clear H
-                 end
-               end.
-      Lemma le_max3 : forall n0 n1 n2 n3,
-          n0 <= max n1 (max n2 n3) ->
-          n0 <= n1 \/ n0 <= n2 \/ n0 <= n3.
-      Proof.
-        max_tac. 
-      Qed.
-      Ltac shortcut_max :=
-        repeat
-          match goal with
-          | H: ?n0 <= max ?n1 (max ?n2 ?n3) |- _ => 
-            let h1:=fresh in
-            let h2:=fresh in
-               eapply le_max3 in H;
-               edestruct H as [h1 | [h1 | h1]];
-               clear H
-          | |- S _ <= S _ => apply le_S 
-          | |- max ?c1 ?c2 <= _ => 
-            eapply max_le_strategy;
-            split
-          end.
+Ltac clear_except H :=
+  let H:=type of H in
+  repeat match goal with
+         | H': ?h |- _ =>
+           match h with
+           | H => fail 1
+           | _ => clear H'
+           end
+         end.
+Ltac clear_unrelated H :=
+  repeat match goal with
+         | H': ?h |- _ =>
+           match h with
+           | context[H] => fail 1
+           | _ => clear H
+           end
+         end.
+Lemma le_max3 : forall n0 n1 n2 n3,
+    n0 <= max n1 (max n2 n3) ->
+    n0 <= n1 \/ n0 <= n2 \/ n0 <= n3.
+Proof.
+  max_tac. 
+Qed.
+Ltac shortcut_max :=
+  repeat
+    match goal with
+    | H: ?n0 <= max ?n1 (max ?n2 ?n3) |- _ => 
+      let h1:=fresh in
+      let h2:=fresh in
+      eapply le_max3 in H;
+      edestruct H as [h1 | [h1 | h1]];
+      clear H
+    | |- S _ <= S _ => apply le_S 
+    | |- max ?c1 ?c2 <= _ => 
+      eapply max_le_strategy;
+      split
+    end.
 
 Lemma h2c_preserves_depth' : forall h t1 t2,
     hc_wt h (t1 ⇒ t2) ->
@@ -824,56 +824,264 @@ Ltac bounds_tac :=
   end.
 
 
-Inductive compose_s : coercion * coercion -> coercion -> Prop :=
-| Comp_Inj_Prj_Ok : forall t1 t2 l s1 s2 s3 s4 s5,
-    make_se_coercion (t1, t2, l) s3 ->
-    med_coercion s1 ->
-    compose_s (s3, s2) s4 -> 
-    compose_s (s1, s4) s5 -> 
-    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) s5
-| Comp_Arr   : forall c1 c2 c3 c4 c5 c6,
-    compose_s (c3, c1) c5 ->
-    compose_s (c2, c4) c6 ->
-    compose_s (c1 →c c2, c3 →c c4) (c5 →c c6)
-| Comp_Ref   : forall c1 c2 c3 c4 c5 c6,
-    compose_s (c3, c1) c5 ->
-    compose_s (c2, c4) c6 ->
-    compose_s (Refc c1 c2, Refc c3 c4) (Refc c5 c6)
-| Compose_Seq_c_L : forall s1 s2 s3 t l,
-    compose_s (s1, s2) s3 -> 
-    compose_s (Prjc t l ;c s1, s2) (Prjc t l ;c s3)
-| Compose_Seq_c_R : forall s1 s2 s3 t,
-    med_coercion s1  ->
-    med_coercion s2  ->
-    compose_s (s1, s2) s3 ->
-    compose_s (s1, s2 ;c Injc t) (s3 ;c Injc t)
-| Compose_Id_L : forall t c,
-    compose_s (ιc t, c) c
-| Compose_Id_R : forall t c,
-    compose_s (c, ιc t) c
-| Compose_Fail_R : forall s1 t l g,
-    med_coercion s1 ->
-    compose_s (s1, Failc t l g) (Failc t l g)
-| Compose_Fail_L    : forall t g l s,
-    compose_s (Failc t l g, s) (Failc t l g).
+(* Lemma h2c_respects_compose''' : forall h1 h2 h3 t1 t2 t3, *)
+(*     hc_wt h1 (t1 ⇒ t2) -> *)
+(*     hc_wt h2 (t2 ⇒ t3) -> *)
+(*     compose_hc (h1, h2) h3 -> *)
+(*     compose_s (h2c_help h1 t1 t2, *)
+(*                h2c_help h2 t2 t3) *)
+(*               (h2c_help h3 t1 t3). *)
+(* Proof. *)
+(*   assert (H: forall n h1 h2 h3 t1 t2 t3, *)
+(*              hc_wt h1 (t1 ⇒ t2) -> *)
+(*              hc_wt h2 (t2 ⇒ t3) -> *)
+(*              compose_hc (h1, h2) h3 -> *)
+(*              [|h1|] < n -> [|h2|] < n -> *)
+(*              compose_s (h2c_help h1 t1 t2, *)
+(*                         h2c_help h2 t2 t3) *)
+(*                        (h2c_help h3 t1 t3)). *)
+(*   { induction n. *)
+(*     - intuition.  *)
+(*     - introv hw1 hw2 cp b1 b2. *)
+(*       (* assert (cw1 : se_wt (h2c_help h1 t1 t2) (t1 ⇒ t2)). *) *)
+(*     (* { apply h2c_wt. assumption. } *) *)
+(*     (* assert (cw2 : se_wt (h2c_help h2 t2 t3) (t2 ⇒ t3)). *) *)
+(*     (* { apply h2c_wt. assumption. } *) *)
+(*     (* assert (hwb3 : hc_wt h3 (t1 ⇒ t3) *) *)
+(*     (*                /\ [|h3|] < S n ). *) *)
+(*     (* {edestruct (compose_hc_total_deterministic_welltyped (S n) h1 h2) *) *)
+(*     (*     as [h3' [cp' [fn [wt b3]]]]. *) *)
+(*     (*   eauto.  *) *)
+(*     (*   eauto.  *) *)
+(*     (*   assumption. *) *)
+(*     (*   assumption.  *) *)
+(*     (*   rewrite <- (fn h3); [idtac | eauto]. *) *)
+(*     (*   split; [assumption | max_tac]. } *) *)
+(*     (* destruct hwb3 as [hw3 b3]. *) *)
+(*     (* assert (cw3 : se_wt (h2c_help h3 t1 t3) (t1 ⇒ t3)). *) *)
+(*     (* { subst. apply h2c_wt. assumption. }         *) *)
+(*     (* split; [idtac | split; [exact cw3 | exact b3]]. *)  *)
+(*     inverts cp; inverts hw1; inverts hw2. *)
+(*     + tc_tac; simpl in *; eauto.  *)
+(*     + tc_tac; simpl in *; eauto. *)
+(*     + tc_tac; simpl in *; eauto. *)
+(*       Ltac compose_h2c_tac := *)
+(*       match goal with *)
+(*       | IH: context[_ -> _],  *)
+(*             H: compose_hc (?h1, ?h2) ?h3 *)
+(*         |- ?g =>  *)
+(*         (* Derive that h3 must be well-typed*) *)
+(*         let h3':= fresh in *)
+(*         let wt := fresh in *)
+(*         let fn := fresh in *)
+(*         let b := fresh in *)
+(*         edestruct (compose_hc_total_deterministic_welltyped *)
+(*                      (1 + [|h1|] + [|h2|]) h1 h2) as [h3' [_ [fn [wt b]]]]; *)
+(*          [solve[eauto] *)
+(*          |solve[eauto] *)
+(*          |clear_except H; omega *)
+(*          |clear_except H; omega *)
+(*          |rewrite (fn h3) in wt; *)
+(*           [idtac | exact H]]; *)
+(*          clear fn; clear h3'; (* clean-up *) *)
+(*            let H1:=fresh in *)
+(*            let H2:=fresh in *)
+(*            let H3:=fresh in *)
+(*            eapply (IH h1 h2 h3 _ _ _) in H as [H1 [H2 H3]]; *)
+(*              [idtac *)
+(*              |solve[eauto] *)
+(*              |solve[eauto] *)
+(*              |solve[bounds_tac] *)
+(*              |solve[bounds_tac] *)
+(*              |idtac ..]  *)
+(*       end. *)
+(*             (*  *)
+(*       Ltac compose_h2c_tac :=  *)
+(*         match goal with *)
+(*         | IHn: context[_ -> _],  *)
+(*           H1: compose_hc (?h1, ?h2) ?h3 *)
+(*           |- ?g => *)
+(*           let H2:=fresh in *)
+(*           let H3:=fresh in *)
+(*           eapply (IHn h1 h2 h3 _ _ _) in H1 as [H1 [H2 H3]]; *)
+(*           [idtac *)
+(*           |solve[eauto] *)
+(*           |solve[eauto] *)
+(*           |solve[bounds_tac] *)
+(*           |solve[bounds_tac] *)
+(*           |idtac ..] *)
+(*         end. *)  *)
+(*       Ltac h2c_depth_tac := *)
+(*         repeat *)
+(*           match goal with *)
+(*           | |- context[h2c_help ?h ?t1 ?t2] =>  *)
+(*             match goal with *)
+(*             | H: [|h|] = [|h2c_help h t1 t2|] |- _ => fail 1 *)
+(*             | _ => *)
+(*               assert ([|h|] = [|h2c_help h t1 t2|]) by *)
+(*                   (solve[eapply h2c_preserves_depth; eauto]) *)
+(*             end *)
+(*           end. *)
+      
+(*       Ltac compose_h2c_m_tac := *)
+(*         repeat match goal with *)
+(*                | H: compose_hc_m _ _ |- _ => *)
+(*                  inverts H *)
+(*                end. *)
+(*     + compose_h2c_m_tac. *)
+(*       all: tc_tac; simpl in *. *)
+(*       all: *)
+(*         repeat *)
+(*           match goal with *)
+(*           | H: compose_hc (?h1, ?h2) ?h3 |- _ => *)
+(*             eapply IHn in H; *)
+(*               [idtac *)
+(*               |eauto *)
+(*               |eauto *)
+(*               |bounds_tac *)
+(*               |bounds_tac] *)
+(*           end. *)
+(*       all: eauto. *)
+(*       Ltac h2c_mk_hc_tac := *)
+(*         match goal with *)
+(*         |H: mk_hc _ _ |- _ =>  *)
+(*          let H':= fresh in  *)
+(*          let H'':= fresh in *)
+(*          inverts keep H; *)
+(*          eapply mk_hc_to_mk_s in H as H''; *)
+(*          (* apply mk_s_depth in H'' as H'; *) *)
+(*          eapply mk_hc_depth in H *)
+(*         |H: mk_hc _ (Fail _ _ _) |- _ => *)
+(*          inverts keep H;  *)
+(*          eapply mk_hc_to_mk_s in H *)
+(*         end. *)
+(*     + match goal with *)
+(*       | B: _ < S ?n, *)
+(*         H: mk_hc _ ?h |- _ => *)
+(*         let H':= fresh in  *)
+(*         let H'':= fresh in  *)
+(*         eapply mk_hc_to_mk_s in H as H''; *)
+(*         idtac *)
+(*       end. *)
+(*       match goal with *)
+(*       | B: _ < S ?n, *)
+(*         H: mk_hc  _ ?h |- _ => *)
+(*         assert ([|h|] < S n) by *)
+(*             (eapply mk_hc_depth in H; *)
+(*             max_tac) *)
+(*       end. *)
+(*       inverts H4; *)
+(*       inverts H6. *)
+(*         try *)
+(*           solve[ *)
+(*             tc_tac; *)
+(*             simpl in *; *)
+(*             repeat *)
+(*               match goal with *)
+(*               | H: compose_hc (?h1, ?h2) ?h3 |- _ => *)
+(*                 eapply IHn in H; *)
+(*                 [idtac *)
+(*                 |eauto *)
+(*                 |eauto *)
+(*                 |bounds_tac *)
+(*                 |bounds_tac] *)
+(*               end; *)
+(*             eauto].  *)
+(*       repeat *)
+       
+(*       all: eauto. *)
+    
+      
+      
+(*       (* apply mk_s_depth in H'' as H'; *) *)
+          
+        
+      
+(*       all: compose_h2c_m_tac.  *)
+(*       all: tc_tac. *)
+(*       Opaque depth. *)
+(*       all: simpl in *.  *)
+(*       Transparent depth.  *)
+(*       all: h2c_depth_tac.  *)
+(*       all: repeat compose_h2c_tac.  *)
+(*       all: try solve[tc_tac; simpl in *; clear IHn; eauto 7]. *)
+(*     + h2c_mk_hc_tac.                                 *)
+(*       all: try solve[tc_tac; simpl in *; clear IHn;  eauto]. *)
+(*     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto]. *)
+(*     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto]. *)
+(*     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto]. *)
+(*       Hint Resolve make_se_coercion_wt. *)
+(*       Ltac hack_tac := *)
+(*         let rec dtr m1 m2 := *)
+(*             let cp:=fresh in *)
+(*             let fn:=fresh in *)
+(*             let wt:=fresh in *)
+(*             let m3:=fresh in *)
+(*             edestruct (compose_s_total_fun_wt m1 m2) *)
+(*               as [m3 [cp [fn wt]]]; [eauto|eauto|idtac] *)
+(*         in match goal with *)
+(*            | H: make_se_coercion _ ?m2 |- compose_s (Prjc _ _ ;c (?m1 ;c _), _ ) _ => *)
+(*              dtr m1 m2 *)
+(*            | H: make_se_coercion _ ?m2 |- compose_s (?m1 ;c _, _ ) _ => *)
+(*              dtr m1 m2 *)
+(*            end. *)
 
-Hint Constructors med_coercion compose_s.
-
-
-
-
-
-Axiom compose_s_total_fun_wt : forall c1 c2 t1 t2 t3,
-    se_wt c1 (t1 ⇒ t2) ->
-    se_wt c2 (t2 ⇒ t3) ->
-    exists c3,
-      compose_s (c1, c2) c3
-      /\
-      (forall c3',
-          compose_s (c1, c2) c3' ->
-          c3 = c3')
-      /\
-      se_wt c3 (t1 ⇒ t3).
+(*     + h2c_mk_hc_tac. *)
+(*       * all: try solve[tc_tac; simpl in *; clear IHn; eauto]. *)
+(*       * tc_tac. *)
+(*         all: simpl in *. *)
+(*         all: inverts cw1; inverts cw2; inverts cw3; *)
+(*           repeat *)
+(*             match goal with *)
+(*             | H: se_med_coercion _ _ |- _ => inverts H *)
+(*             | H: se_inj_coercion _ _ |- _ => inverts H *)
+(*             end. *)
+(*         all: hack_tac. *)
+(*         all: eauto. *)
+(*         all: *)
+(*           match goal with *)
+(*           | H: se_wt _ _ |- _ => inverts H *)
+(*           end; *)
+(*           repeat *)
+(*             match goal with *)
+(*             | H: se_med_coercion _ _ |- _ => inverts H *)
+(*             | H: se_inj_coercion _ _ |- _ => inverts H *)
+(*             end. *)
+(*         all: try match goal with *)
+(*                  | H: compose_s _ (Failc _ _ _) |- _ => inverts H *)
+(*                  end. *)
+(*         all: try match goal with *)
+(*                  | H: _ = _ |- _ => inverts H *)
+(*                  end.  *)
+(*         all: eauto. *)
+(*       * tc_tac. *)
+(*         all: simpl in *. *)
+(*         all: inverts cw1; inverts cw2; inverts cw3; *)
+(*           repeat *)
+(*             match goal with *)
+(*             | H: se_med_coercion _ _ |- _ => inverts H *)
+(*             | H: se_inj_coercion _ _ |- _ => inverts H *)
+(*             end. *)
+(*         all: hack_tac. *)
+(*         all: eauto. *)
+(*         all: *)
+(*           match goal with *)
+(*           | H: se_wt _ _ |- _ => inverts H *)
+(*           end; *)
+(*           repeat *)
+(*             match goal with *)
+(*             | H: se_med_coercion _ _ |- _ => inverts H *)
+(*             | H: se_inj_coercion _ _ |- _ => inverts H *)
+(*             end. *)
+(*         all: try match goal with *)
+(*                  | H: compose_s _ (Failc _ _ _) |- _ => inverts H *)
+(*                  end. *)
+(*         all: try match goal with *)
+(*                  | H: _ = _ |- _ => inverts H *)
+(*                  end.  *)
+(*         all: eauto 6. *)
+(*     + h2c_mk_hc_tac. tc_tac; simpl in *;  eauto.  *)
+(* Qed.       *)
 
 Lemma h2c_respects_compose'' : forall n h1 h2 h3 t1 t2 t3,
     hc_wt h1 (t1 ⇒ t2) ->
@@ -944,22 +1152,6 @@ Proof.
              |solve[bounds_tac]
              |idtac ..] 
       end.
-            (* 
-      Ltac compose_h2c_tac := 
-        match goal with
-        | IHn: context[_ -> _], 
-          H1: compose_hc (?h1, ?h2) ?h3
-          |- ?g =>
-          let H2:=fresh in
-          let H3:=fresh in
-          eapply (IHn h1 h2 h3 _ _ _) in H1 as [H1 [H2 H3]];
-          [idtac
-          |solve[eauto]
-          |solve[eauto]
-          |solve[bounds_tac]
-          |solve[bounds_tac]
-          |idtac ..]
-        end. *) 
       Ltac h2c_depth_tac :=
         repeat
           match goal with
@@ -971,7 +1163,6 @@ Proof.
                   (solve[eapply h2c_preserves_depth; eauto])
             end
           end.
-      
       Ltac compose_h2c_m_tac :=
         repeat match goal with
                | H: compose_hc_m _ _ |- _ =>
@@ -1009,76 +1200,16 @@ Proof.
     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
     + all: try solve[tc_tac; simpl in *; clear IHn;  eauto].
-      Hint Resolve make_se_coercion_wt.
-      Ltac hack_tac :=
-        let rec dtr m1 m2 :=
-            let cp:=fresh in
-            let fn:=fresh in
-            let wt:=fresh in
-            let m3:=fresh in
-            edestruct (compose_s_total_fun_wt m1 m2)
-              as [m3 [cp [fn wt]]]; [eauto|eauto|idtac]
-        in match goal with
-           | H: make_se_coercion _ ?m2 |- compose_s (Prjc _ _ ;c (?m1 ;c _), _ ) _ =>
-             dtr m1 m2
-           | H: make_se_coercion _ ?m2 |- compose_s (?m1 ;c _, _ ) _ =>
-             dtr m1 m2
-           end.
-
     + h2c_mk_hc_tac.
-      * all: try solve[tc_tac; simpl in *; clear IHn; eauto].
-      * tc_tac.
-        all: simpl in *.
-        all: inverts cw1; inverts cw2; inverts cw3;
-          repeat
-            match goal with
-            | H: se_med_coercion _ _ |- _ => inverts H
-            | H: se_inj_coercion _ _ |- _ => inverts H
-            end.
-        all: hack_tac.
-        all: eauto.
-        all:
+      all: tc_tac. 
+      all: simpl in *.
+      all: inverts cw1; inverts cw2; inverts cw3;
+        repeat
           match goal with
-          | H: se_wt _ _ |- _ => inverts H
-          end;
-          repeat
-            match goal with
-            | H: se_med_coercion _ _ |- _ => inverts H
-            | H: se_inj_coercion _ _ |- _ => inverts H
-            end.
-        all: try match goal with
-                 | H: compose_s _ (Failc _ _ _) |- _ => inverts H
-                 end.
-        all: try match goal with
-                 | H: _ = _ |- _ => inverts H
-                 end. 
-        all: eauto.
-      * tc_tac.
-        all: simpl in *.
-        all: inverts cw1; inverts cw2; inverts cw3;
-          repeat
-            match goal with
-            | H: se_med_coercion _ _ |- _ => inverts H
-            | H: se_inj_coercion _ _ |- _ => inverts H
-            end.
-        all: hack_tac.
-        all: eauto.
-        all:
-          match goal with
-          | H: se_wt _ _ |- _ => inverts H
-          end;
-          repeat
-            match goal with
-            | H: se_med_coercion _ _ |- _ => inverts H
-            | H: se_inj_coercion _ _ |- _ => inverts H
-            end.
-        all: try match goal with
-                 | H: compose_s _ (Failc _ _ _) |- _ => inverts H
-                 end.
-        all: try match goal with
-                 | H: _ = _ |- _ => inverts H
-                 end. 
-        all: eauto 6.
+          | H: se_med_coercion _ _ |- _ => inverts H
+          | H: se_inj_coercion _ _ |- _ => inverts H
+          end.
+      all: solve[eauto]. 
     + h2c_mk_hc_tac. tc_tac; simpl in *;  eauto. 
 Qed.      
 

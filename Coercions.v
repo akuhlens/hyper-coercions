@@ -597,16 +597,11 @@ Inductive med_coercion : coercion -> Prop :=
 
 
 Inductive compose_s : coercion * coercion -> coercion -> Prop :=
-| Comp_Inj_Prj_Fail : forall t1 t2 l s1 s2,
-    make_se_coercion (t1, t2, l) (Failc t1 l t2) ->
-    med_coercion s1 ->
-    compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) (Failc t1 l t2)
 | Comp_Inj_Prj_Ok : forall t1 t2 l s1 s2 s3 s4 s5,
     make_se_coercion (t1, t2, l) s3 ->
-    med_coercion s3 ->
     med_coercion s1 ->
-    compose_s (s1, s3) s4 -> 
-    compose_s (s4, s2) s5 -> 
+    compose_s (s3, s2) s4 -> 
+    compose_s (s1, s4) s5 -> 
     compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) s5
 | Comp_Arr   : forall c1 c2 c3 c4 c5 c6,
     compose_s (c3, c1) c5 ->
@@ -637,15 +632,57 @@ Inductive compose_s : coercion * coercion -> coercion -> Prop :=
 Hint Constructors med_coercion compose_s.
 
 
-Axiom compose_s_total_fun_wt : forall c1 c2 t1 t2 t3,
-    se_wt c1 (t1 ⇒ t2) ->
-    se_wt c2 (t2 ⇒ t3) ->
-    exists c3,
-      compose_s (c1, c2) c3
-      /\
-      (forall c3',
-          compose_s (c1, c2) c3' ->
-          c3 = c3')
-      /\
-      se_wt c3 (t1 ⇒ t3).
 
+(* Inductive compose_s : coercion * coercion -> coercion -> Prop := *)
+(* | Comp_Inj_Prj_Fail : forall t1 t2 l s1 s2, *)
+(*     make_se_coercion (t1, t2, l) (Failc t1 l t2) -> *)
+(*     med_coercion s1 -> *)
+(*     compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) (Failc t1 l t2) *)
+(* | Comp_Inj_Prj_Ok : forall t1 t2 l s1 s2 s3 s4 s5, *)
+(*     make_se_coercion (t1, t2, l) s3 -> *)
+(*     med_coercion s3 -> *)
+(*     med_coercion s1 -> *)
+(*     compose_s (s1, s3) s4 ->  *)
+(*     compose_s (s4, s2) s5 ->  *)
+(*     compose_s (s1 ;c Injc t1, Prjc t2 l ;c s2) s5 *)
+(* | Comp_Arr   : forall c1 c2 c3 c4 c5 c6, *)
+(*     compose_s (c3, c1) c5 -> *)
+(*     compose_s (c2, c4) c6 -> *)
+(*     compose_s (c1 →c c2, c3 →c c4) (c5 →c c6) *)
+(* | Comp_Ref   : forall c1 c2 c3 c4 c5 c6, *)
+(*     compose_s (c3, c1) c5 -> *)
+(*     compose_s (c2, c4) c6 -> *)
+(*     compose_s (Refc c1 c2, Refc c3 c4) (Refc c5 c6) *)
+(* | Compose_Seq_c_L : forall s1 s2 s3 t l, *)
+(*     compose_s (s1, s2) s3 ->  *)
+(*     compose_s (Prjc t l ;c s1, s2) (Prjc t l ;c s3) *)
+(* | Compose_Seq_c_R : forall s1 s2 s3 t, *)
+(*     med_coercion s1  -> *)
+(*     med_coercion s2  -> *)
+(*     compose_s (s1, s2) s3 -> *)
+(*     compose_s (s1, s2 ;c Injc t) (s3 ;c Injc t) *)
+(* | Compose_Id_L : forall t c, *)
+(*     compose_s (ιc t, c) c *)
+(* | Compose_Id_R : forall t c, *)
+(*     compose_s (c, ιc t) c *)
+(* | Compose_Fail_R : forall s1 t l g, *)
+(*     med_coercion s1 -> *)
+(*     compose_s (s1, Failc t l g) (Failc t l g) *)
+(* | Compose_Fail_L    : forall t g l s, *)
+(*     compose_s (Failc t l g, s) (Failc t l g). *)
+
+(* Hint Constructors med_coercion compose_s. *)
+
+
+(* Theorem compose_s_total_fun_wt : forall c1 c2 t1 t2 t3, *)
+(*     se_wt c1 (t1 ⇒ t2) -> *)
+(*     se_wt c2 (t2 ⇒ t3) -> *)
+(*     exists c3, *)
+(*       compose_s (c1, c2) c3 *)
+(*       /\ *)
+(*       (forall c3', *)
+(*           compose_s (c1, c2) c3' -> *)
+(*           c3 = c3') *)
+(*       /\ *)
+(*       se_wt c3 (t1 ⇒ t3). *)
+(* Admitted.  *)
