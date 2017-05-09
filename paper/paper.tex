@@ -8,6 +8,8 @@
 \usepackage{xifthen}
 \usepackage{subcaption}
 \usepackage{wrapfig}
+\usepackage{IEEEtrantools}
+
 
 % Tell latex I really dislike it when you break my inline math!
 \relpenalty=10000
@@ -27,16 +29,16 @@
 %% \acmMonth{3}
 
 % Copyright
-%\setcopyright{acmcopyright}
+%\setcopyright{none}
 %\setcopyright{acmlicensed}
-%\setcopyright{rightsretained}
+\setcopyright{rightsretained}
 %\setcopyright{usgov}
 %\setcopyright{usgovmixed}
 %\setcopyright{cagov}
 %\setcopyright{cagovmixed}
 
 % DOI
-%\acmDOI{0000001.0000001_2}
+\acmDOI{}
 
 % Paper history
 %\received{February 2007}
@@ -136,13 +138,19 @@
 
 Hyper-Coercions are a densely packed version of space-efficient
 coercions in the style of \citet{Siek:2015ab} which we hope to use to
-increase the performance of the coercions implementation of gradual
-typing in the Schml compiler. The main intuition behind their
-formulation is that the longest sequence of coercions in
-space-efficient normal form is a series of a projection, then some
-cast mediating between two possibly equal types, followed a injection;
-the hyper-coercion structure can represent this longest chain of
-coercions in a single hyper-coercion node. A hyper-coercion (\HC \; in
+increase the performance of gradually typed programs. 
+%
+The main intuition behind their formulation is that the longest
+sequence of coercions in \citet{Siek:2015ab} is a series of a
+projection, then cast intermediating between two possibly equal types,
+followed a injection; the hyper-coercion structure can represent this
+longest chain of coercions in a single hyper-coercion node.
+%
+When we translate model to the implementation this means that a direct
+implementation should have to follow less pointers because the
+representation keep all subcomponent in the same structure.
+%
+A hyper-coercion (\HC \; in
 Figure~\ref{fig:hcSyntax}) is a 5-tuple that contain a projection
 (\Prj), the source type and target types (\T{}s) of the intermediating
 coercion (\Med), the intermediating coercion itself, and finally an
@@ -155,27 +163,43 @@ cast (\Med) from $\T_2$ to $\T_3$, and well typed injection from
 $\T_2$ to $\T_3$.
 
 If a previous composition operation (shown in
-Figure~\Ref{fig:hcComposition}) resulted in a failed coercion then the
+Figure~\ref{fig:hcCompose}) resulted in a failed coercion then the
 alternative \emph{failed hyper-coercion}
 (\hcfail{\Prj}{\I}{\I_{2}}{\Lbl}{\I_{3}}) is used to signify that
 after a projection (\Prj) to type (\T), the failed hyper-coercion will
 report an error due to inconsistency between injectable (non-dynamic)
-types $\I_1$ and $\I_2$. This failure will blame \Lbl, but the
-projection must be preserved because it also has the potential before
+types $\I_1$ and $\I_2$. This failure will blame $\Lbl$ if it is applied,
+but the projection must be preserved because it also has the
+potential to fail before
 this error is reported. A failed coercion is well-typed from $\T_1$ to
 $\T_2$ if the projection is well-typed from $\T_1$ to $\I_1$, $\I_1$
 is shallow consistent with $\I_2$, and $I_2$ is shallow inconsistent
-with $\I_2$.
+with $\I_3$.
 
 The rest of typing judgments are standard. Syntactically, projections
 and injections differ in that they no longer contain the types that they
 project to and inject from. Instead their source and target types
 are shared with the overall hyper-coercion. This is merely to reduce
-the complexity of composition rules, and reflects the mentality of
+the complexity of composition rules and reflects the mindset of
 considering a sequence of casts as a single entity.
 
-Make coercion takes any two types and a blame label and returns a
-hyper-coercion.
+The compose operation on hyper-coercions is a direct translation
+of the compose operation of \citet{Siek:2015ab}. The larger granularity
+of hyper-coercions causes a need for some special cases when
+handling failure, but we have found a way around this in our
+actual implementation which we discussed in Section~\ref{sec:schml}.
+
+We have formalized this model in Coq and proven that compose preserves
+the well-typing of hyper-coercions, that hyper-coercions are
+isomorphic to space-efficient coercions, and that this isomorphism
+respects the composition operation. Sections~\ref{sec:well-typing}
+and~\ref{sec:iso} explain these proofs. Section~\ref{sec:schml}
+discusses how the implementation differs from the model shown in
+Figure~\ref{fig:hc}, and Section~\ref{sec:perf} presents benchmark
+results that indicate the initial implementation does not improve the
+performance over our current coercions implementation.
+
+
 \begin{figure}[tbh]
   \small
   \begin{subfigure}{.5\textwidth}
@@ -277,7 +301,7 @@ hyper-coercion.
       \mkcrcn{\I_1}{\I_2} &= \hcfail{\pmt}{\I_1}{\I_1}{\Lbl}{\I_2} %
       \hspace{.6em} \texttt{if} \; \I_1 \sic \I_2
     \end{align*}
-    \caption{Make Coercion}
+    \caption{Make Hyper-Coercion}
     \label{fig:hcMakeCoercion}
   \end{subfigure}
   \begin{subfigure}{.5\textwidth}
@@ -326,7 +350,7 @@ hyper-coercion.
           \mkcrcn[\Lbl_1]{\I_2}{\I_3} = \hcfail{\pmt}{\I_2}{\I_2}{\Lbl_1}{\I_3}
     \end{align*}
     \caption{Compose Hyper-Coercions}
-    \label{fig:composeHC}
+    \label{fig:hcCompose}
   \end{subfigure}%
   \begin{subfigure}{.5\textwidth}
     \begin{align*}
@@ -348,7 +372,7 @@ hyper-coercion.
       \depth{\Ref{\T}} &= 1 + \depth{\T}
     \end{align*}
     \caption{Type Depth}
-    \label{fig:hctydepth}
+    \label{fig:tydepth}
   \end{subfigure}%
   \begin{subfigure}{.5\textwidth}
     \begin{align*}
@@ -361,7 +385,7 @@ hyper-coercion.
       \depth{\rf{\HC_1}{\HC_2}} &= 1 + \Max{\depth{\HC_1}, \depth{\HC_2}}
     \end{align*}
     \caption{Hyper-Coercion Depth}
-    \label{fig:hctydepth}
+    \label{fig:hcdepth}
     \end{subfigure}
   \caption{The Hyper-Coercion Representation}
   \label{fig:hc}
@@ -370,7 +394,7 @@ hyper-coercion.
 \clearpage
 
 \section{Composition of Hyper-Coercions Preserves Well-Typing}
-
+\label{sec:well-typing}
 In order to prove that composition of hyper-coercion preserve
 the well-typing of hyper-coercions, we must first show a
 few properties about the make hyper-coercion relation. 
@@ -378,8 +402,7 @@ few properties about the make hyper-coercion relation.
 \begin{lem}
   \label{lem:mk_hc_wt}
   (Make hyper-coercion produces well-typed hyper-coercions.)\\
-  Forall $\T_1$ $\T_2$ \Lbl \, \HC, \,
-  $\mkcrcn{\T_1}{\T_2} = \HC$ implies that \cwt{\HC}{\T_1}{\T_2}
+  $\mkcrcn{\T_1}{\T_2} = \HC$ implies \cwt{\HC}{\T_1}{\T_2}
 \end{lem}
 \begin{proof}
   Proof by induction on the depth of \HC, and inversion
@@ -389,37 +412,35 @@ few properties about the make hyper-coercion relation.
 \begin{lem}
   \label{lem:mk_hc_sym}
   (make coercion is defined over symmetric arguments.)\\
-  Forall $\T_1$ $\T_2$ $\Lbl$ $\HC_1$, \,
   $\mkcrcn{\T_1}{\T_2} = \HC_1$ \, implies that
   there exists an $\HC_2$ such that
   $\mkcrcn{\T_2}{\T_1} = \HC_2$ and
-  $\depth{\HC_2} \le max \depth{\T_2} \depth{\T_1}$.
+  $\depth{\HC_2} \; \le \Max{\depth{\T_2}, \depth{\T_1}}$.
 \end{lem}
 \begin{proof}
   Proof by induction on the depth of coercions, and inversion
-  on the construction of the coercion. 
+  on the construction of $\HC_1$. 
 \end{proof}
 
 \begin{lem}
   \label{lem:mk_hc_fn}
   (Make hyper-coercion is deterministic.)\\
-  Forall $\T_1$ $\T_2$ $\Lbl$ $\HC_1$ $\HC_2$, \,
   $\mkcrcn{\T_1}{\T_2} = \HC_1$ and
-  $\mkcrcn{\T_1}{\T_2} = \HC_2$ implies that
+  $\mkcrcn{\T_1}{\T_2} = \HC_2$ implies
   $\HC_1 = \HC_2$.
 \end{lem}
 \begin{proof}
   Proof by induction on the depth of the types and
-  inversion on the constructions of coercions. 
+  inversion on the constructions of $\HC_1$ and $\HC_2$. 
 \end{proof}
 
 \begin{lem}
   \label{lem:mk_hc_tot}
   (Make hyper-coercion is a total function.)\\
-  Forall $\T_1$ $\T_2$ $\Lbl$,
+  For all $\T_1$, $\T_2$, and $\Lbl$
   there exists an $\HC$ such that
   $\mkcrcn{\T_1}{\T_2} = \HC$ and
-  $\depth{\HC} \le \depth{\T_1} \depth{\T_2}$.
+  $\depth{\HC} \; \le \Max{\depth{\T_1}, \depth{\T_2}$}.
 \end{lem}
 \begin{proof}
   Proof by induction on $\T_1$ and case analysis of $\T_2$
@@ -428,7 +449,7 @@ few properties about the make hyper-coercion relation.
 \end{proof}
 
 \begin{cor}
-  \label{lem:mk_hc_depth}
+  \label{cor:mk_hc_depth}
   (The depth of input types bound the depth of the result of make hyper-coercion.)\\
   For all $\T_1$, $\T_2$, $\Lbl$, and $\HC$,
   where $\mkcrcn{\T_1}{\T_2} = \HC$, 
@@ -443,10 +464,10 @@ few properties about the make hyper-coercion relation.
 \begin{lem}
   \label{lem:mk_hc_dec}
   (Make failed hyper-coercion is decidable.)\\
-  Forall $\I_1$ $\I_2$ $\Lbl$,
+  For all $\I_1$, $\I_2$, and $\Lbl$,
   either $\I_1 \sct \I_2$ and there exists and $\Med$
   such that $\mkcrcn{\I_1}{\I_2} = \hc{\pmt}{\I_1}{\Med}{\I_2}{\imt}$
-  and $\depth{\hc{\pmt}{\I_1}{\Med}{\I_2}{\imt}}
+  and $\depth{\hc{\pmt}{\I_1}{\Med}{\I_2}{\imt}} \;
   \le \Max{\depth{\I_1}, \depth{\I_2}}$,
   or $\I_1 \sic \I_2$ and
   $\mkcrcn{\I_1}{\I_2} = \hcfail{\pmt}{\I_1}{\I_1}{\Lbl}{\I_2}$.
@@ -454,33 +475,38 @@ few properties about the make hyper-coercion relation.
 \begin{proof}
   Proof by case analysis on the decidability of shallow consistency,
   use of Lemma~\ref{lem:mk_hc_tot} and Lemma~\ref{lem:mk_hc_fn}, and
-  inversion on the construction of the coercion. 
+  inversion on the construction of the coercion generated by the
+  use of Lemma~\ref{lem:mk_hc_tot}. 
 \end{proof}
 
 Because we are choosing to view the maximal sequence of
-space-efficient coercions as standard size of a single hyper-coercion
-proofs about hyper-coercions tend to have very deep case analysis and
-reasoning before we are able to use the inductive hypothesis. This can
+space-efficient coercions as the standard size of a single hyper-coercion,
+proofs about hyper-coercions tend to have a very large case analysis
+before we are able to use the inductive hypothesis. This can
 lead to repetitive proving of many of the same properties. To
-alleviate this we break our Theorem~\ref{thm:composeWDF} into two
+alleviate this, we break our Theorem~\ref{thm:composeWDF} into two
 Lemmas~\ref{lem:thm:help} and~\ref{lem:composeIWDF} which end up being straightforward and relatively short.
 
 Intuitively, Lemma~\ref{lem:thm:help} states that the proof obligation
 of the inductive step of a hypothetical inductive proof of
 Theorem~\ref{thm:composeWDF} can be proven given the inductive
-hypothesis of the proof of Lemma~\ref{lem:composeIWDF}. Since
-compose hyper-coercions and compose intermediates are mutually
-recursive a proof that either one of them is well behaved is
-enough to ``tie the knot'', but would normally have to induct
-all the way through the other definition in order to do so.
+hypothesis of the proof of Lemma~\ref{lem:composeIWDF}. Since compose
+hyper-coercions and compose intermediates are mutually recursive, a
+proof that either one of them is well-behaved is enough to ``tie the
+knot'', this proof relies on the inductive hypothesis of
+Lemma~\ref{lem:composeIWDF}, but this is conveniently available when
+we need to use Lemma~\ref{lem:thm:help} to prove
+Lemma~\ref{lem:composeIWDF}.
+
+\pagebreak
 
 \begin{lem}
   \label{lem:thm:help}
-  (Theorem~\ref{thm:composeWDF} inductive step is implied by Lemma~\ref{lem:composeIWDF} inductive hypothesis.)
+  (Theorem~\ref{thm:composeWDF} inductive step is implied by Lemma~\ref{lem:composeIWDF} inductive hypothesis.)\\
   For all $n$, $\HC_1$, and $\HC_2$ where:
   \begin{itemize}
-  \item $\depth{\HC_1} < n$,
-  \item $\depth{\HC_2} < n$, 
+  \item $\depth{\HC_1} \; < n$,
+  \item $\depth{\HC_2} \; < n$, 
   \item $\cwt{\HC_1}{\T_1}{\T_2}$,
   \item $\cwt{\HC_2}{\T_2}{\T_3}$,
   \item and it holds that for all $\Med_1$ and $\Med_2$, where:
@@ -494,7 +520,7 @@ all the way through the other definition in order to do so.
     \begin{itemize}
     \item $\cmp{\Med_1}{\Med_2} = \Med_3$,
     \item $\cwt{\Med_3}{\T_1}{\T_3}$,
-    \item $\depth{\Med_3} \le \depth{\Med_1} \depth{\Med_2}$,
+    \item $\depth{\Med_3} \; \le \; \Max{\depth{\Med_1}, \depth{\Med_2}}$,
     \item and for all $\Med_{3}^{\prime}$ where $\cmp{\Med_1}{\Med_2} = \Med_{3}^{\prime}$
       it is the case that $\Med_{3}^{\prime} = \Med_{3}$
     \end{itemize}
@@ -511,13 +537,13 @@ all the way through the other definition in order to do so.
 \begin{proof}
   We proceed by case analysis on the well-typed hyper-coercions
   $\HC_1$ and $\HC_2$. Whenever an non-identity project and
-  inject sequence meet we case on whether the two types are
+  inject sequence meet, we case on whether the two types are
   shallow-consistent or not. This allows us to decide whether
   the make hyper-coercion call will result in a hyper-coercion
   or a failed hyper-coercion in accordance with
   Lemma~\ref{lem:mk_hc_dec}.
 
-  As an example let's take the hardest case where two non-failed
+  As an example we will take the hardest case where two non-failed
   hyper-coercions are compose and a call to make coercion is necessary.
   (i.e. $\HC_1 = \hc{\Prj}{\I_{1}}{\Med_1}{\I_{2}}{\inj}$
   and $\HC_2 = \hc{\prj{\Lbl}}{\I_{3}} {\Med_1}{\I_{4}}{\Inj}$)
@@ -526,7 +552,7 @@ all the way through the other definition in order to do so.
   $\I_{2} \sct \I_{3}$ and
   there exists an $\Med_3$ such that
   $\mkcrcn{\I_{2}}{\I_{3}} = \hc{\pmt}{\I_{2}}{\Med_3}{\I_{2}}{\imt}$
-  and $\depth{\Med_3} \le max \depth{\I_{2}}\depth{\I_{3}}$
+  and $\depth{\Med_3} \le \Max{\depth{\I_{2}}, \depth{\I_{3}}}$
   or
   $\I_{2} \sic \I_{3}$ and
   $\mkcrcn{\I_{2}}{\I_{3}} = \hcfail{\pmt}{\I_{2}}{\I_2}{\Lbl}{\I_{3}}$
@@ -541,7 +567,7 @@ all the way through the other definition in order to do so.
         In the case of $\Med_3$ we derive \cwt{\Med_3}{\I_2}{\I_2} from
         Lemma~\ref{lem:mk_hc_wt} and $\depth{\Med_3} \le n$ by
         reasoning about the bounds set by:
-        $\depth{\Med_3} \le max \depth{\I_{2}}\depth{\I_{3}}$, \, 
+        $\depth{\Med_3} \le \Max{\depth{\I_{2}}, \depth{\I_{3}}}$, \, 
         $\I_2 \in \HC_1$, \,
         $\I_3 \in \HC_2$, \,
         $\depth{\HC_1} < 1 + n$,\,
@@ -550,9 +576,9 @@ all the way through the other definition in order to do so.
         of intermediates to prove the existence of $\Med_5$ which
         results from the composition of $\Med_4$ and $\Med_2$.
         The use of $\Med_4$ with this assumption is justified
-        because when $\Med_4$ was proven to exists we also
+        because when $\Med_4$ was proven to exist, we also
         proved \cwt{\Med_4}{\I_1}{\I_3} and
-        $\depth{\Med_4} \le max \depth{\Med_1} \depth{\Med_3}$ where
+        $\depth{\Med_4} \le \Max{ \depth{\Med_1} , \depth{\Med_3}}$ where
         $\Med_1$ and $\Med_3$ have both already been shown to be
         less than $n$. The use of $\Med_2$ with this assumption
         is justified for the same reason that $\Med_1$ was.
@@ -566,13 +592,13 @@ all the way through the other definition in order to do so.
   \end{itemize}
 \end{proof}
 
-Now that we have proven this it is straight forward to show
+Now that we have proven this, it is straight forward to show
 that compose intermediating coercions is a type preserving
 deterministic function. 
 
 \begin{lem}
   \label{lem:composeIWDF}
-  (Compose intermediates is a type-preserving deterministic total function.)
+  (Compose intermediates is a type-preserving deterministic total function.)\\
   Forall $n$ $\Med_1$ and $\Med_2$, such that
   $\depth{\Med_1} \, \le n$, \; $\depth{\Med_2} \, \le n$, \;
   $\cwt{\Med_1}{\T_1}{\T_2}$, and $\cwt{\Med_2}{\T_2}{\T_3}$,
@@ -581,7 +607,7 @@ deterministic function.
   $\cmp{\Med_1}{\Med_2} = \Med_3$, \,
   forall $\Med_{3}^{\prime}$, \; $\cmp{\Med_1}{\Med_2} = \Med_{3}^{\prime}$
   implies that $\Med_{3}^{\prime} = \Med_{3}$,
-  and $\depth{\Med_3} \le \depth{\Med_1} \depth{\Med_2}$.
+  and $\depth{\Med_3} \le \Max{\depth{\Med_1}, \depth{\Med_2}}$.
 \end{lem}
 \begin{proof}
   Proof by induction on $n$. 
@@ -597,19 +623,19 @@ deterministic function.
     $\Med_2 = \fn{\HC_3}{\HC_4}$.
     %  
     Note that it is easy to show that $\HC_{1-4}$ are well
-    typed by inversion of the well-typing on there containing
+    typed by inversion of the well-typing on their containing
     intermediating coercions.
     %
     Also note that from simplification and some reasoning
-    about the behavior of $max$ it is easy to show that
+    about the behavior of $\Max{}$ it is easy to show that
     $\depth{\HC_{1-4}} < 1 + n$.
     %
-    As such each are justified for use Lemma~\ref{lem:thm:help}
+    As such each are justified for use with Lemma~\ref{lem:thm:help}
     aided by the inductive hypothesis.
     \begin{itemize}
-    \item We Lemma~\ref{lem:thm:help} once with $\HC_3$ and $\HC_1$
+    \item We use Lemma~\ref{lem:thm:help} once with $\HC_3$ and $\HC_1$
       and prove that there is an $HC_5$.
-    \item We Lemma~\ref{lem:thm:help} again with $\HC_2$ and $\HC_4$
+    \item We use Lemma~\ref{lem:thm:help} again with $\HC_2$ and $\HC_4$
       and prove that there is an $HC_6$.
     \end{itemize}
     We choose $\Med_3 = \Fn{\HC_5}{\HC_6}$ and the rest of the
@@ -622,14 +648,18 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 
 \begin{thm}
   \label{thm:composeWDF}
-  (Compose is a type-preserving deterministic total function.)  Forall
-  $n$ $\HC_1$ and $\HC_2$ such that $\depth{\HC_1} < n$, \,
-  $\depth{\HC_2} < n$, \, $\cwt{\HC_1}{\T_1}{\T_2}$, and
-  $\cwt{\HC_2}{\T_2}{\T_3}$, and , there exists an $\HC_3$ such that
-  $\depth{\HC_3} \, \le max \depth{\HC_1} \; \depth{\HC_2}$, \,
-  $\cwt{\HC_3}{\T_1}{\T_3}$, \, $\cmp{\HC_1}{\HC_2} = \HC_3$, and
-  forall $H_{3}^{\prime}$, \; $\cmp{\HC_1}{\HC_2} = H_{3}^{\prime}$
-  implies that $H_{3}^{\prime} = H_{3}$.
+  (Compose is a type-preserving deterministic total function.)\\
+  For all $n$, $\HC_1$, and $\HC_2$, where
+  $\depth{\HC_1} < n$, \,
+  $\depth{\HC_2} < n$, \,
+  $\cwt{\HC_1}{\T_1}{\T_2}$, and
+  $\cwt{\HC_2}{\T_2}{\T_3}$,
+  there exists an $\HC_3$ such that
+  $\depth{\HC_3} \, \le \Max{\depth{\HC_1}, \depth{\HC_2}}$, \,
+  $\cwt{\HC_3}{\T_1}{\T_3}$,\,
+  $\cmp{\HC_1}{\HC_2} = \HC_3$,
+  and for all $H_{3}^{\prime}$, \; $\cmp{\HC_1}{\HC_2} = H_{3}^{\prime}$
+  implies $H_{3}^{\prime} = H_{3}$.
 \end{thm}
 \begin{proof}
   This is implied by the instantiation of Lemma~\ref{lem:thm:help}
@@ -637,10 +667,11 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \end{proof}
 
 \begin{cor}
+  \label{cor:compose_preserves_typing}
   (Compose hyper-coercions preserves well-typing.)\\
-  Forall, $\HC_1$ $\HC_2$ $\HC_3$ $\T_1$ $\T_2$ $\T_3$, \;
-  \cwt{\HC_1}{\T_1}{\T_2}, \; \cwt{\HC_2}{\T_2}{\T_3}, and
-  \cmp{\HC_1}{\HC_2}{\HC_3} \; imply \cwt{\HC_3}{\T_1}{\T_3}.
+  For all $\HC_1$, $\HC_2$, $\HC_3$, $\T_1$, $\T_2$, and $\T_3$, where
+  $\cwt{\HC_1}{\T_1}{\T_2}$, $\cwt{\HC_2}{\T_2}{\T_3}$, and
+  $\cmp{\HC_1}{\HC_2}{\HC_3}$, it is the case that \cwt{\HC_3}{\T_1}{\T_3}.
 \end{cor}
 \begin{proof}
   Instantiation of Theorem~\ref{thm:composeWDF}.
@@ -649,7 +680,19 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \clearpage
 
 \section{The Hyper-Coercions / Coercion Isomorphism}
-\begin{figure}[tbh]
+\label{sec:iso}
+
+In order to prove that hyper-coercions are isomorphic to normal
+coercion we first define what we mean by normal coercions.  The
+space-efficient coercions defined by \citet{Siek:2015ab} has
+Lazy-UD semantics~\citep{Siek:2009rt}, but the Schml compiler use
+Lazy-D semantics for coercions.  Figure~\ref{fig:Crcn} translates the
+space-efficient coercions of \citet{Siek:2015ab} to the Lazy-D
+semantics. The rest of this section explains how we
+proved the isomorphism in Coq. 
+
+
+\begin{figure}[b]
   \centering
   \begin{subfigure}{.5\textwidth}
     \[
@@ -670,19 +713,21 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
     \caption{Syntax of Space Efficient Lazy-D Coercions}
     \label{fig:SESyntax}
   \end{subfigure}%
-    \begin{subfigure}{.5\textwidth}
-    \begin{align*}
-      $\depth{\id[\T]}$ \; \texttt{or} \;
-        $\depth{\prj[\T]{\Lbl}}$ \; \texttt{or} \;
-        $\depth{\inj[\T]}$ &= \depth{\T}
+  \begin{subfigure}{.5\textwidth}
+    \begin{IEEEeqnarray*}{crCl}
+      \hspace{1.5cm} & \depth{\id[\T]} &=& \depth{\T}
       \\
-      \depth{\fn{\Crcn_1}{\Crcn_2}} \; \texttt{or} \; \depth{\rf{\Crcn_1}{\Crcn_2}}
-      &= 1 + \Max{\depth{\Crcn_1}, \depth{\Crcn_2}}
+      &\depth{\prj[\I]{\Lbl}} \, \texttt{or} \,
+      \depth{ \inj[\I] }  &=& \depth{\I}
       \\
-      \depth{\Seq{\Crcn_1}{\Crcn_2}} &= \Max{\depth{\Crcn_1}, \depth{\Crcn_2}}
+      &\depth{\fn{\Crcn_1}{\Crcn_2}} \, \texttt{or} \,
+      \depth{\rf{\Crcn_1}{\Crcn_2}}
+      &=& 1 + \Max{\depth{\Crcn_1}, \depth{\Crcn_2}}
       \\
-      \depth{\failed{\I_1}{\Lbl}{\I_2}} &= \Max{\depth{\I_1}, \depth{\I_2}}
-    \end{align*}
+      &\depth{\Seq{\Crcn_1}{\Crcn_2}} &=& \Max{\depth{\Crcn_1}, \depth{\Crcn_2}}
+      \\
+      &\depth{\failed{\I_1}{\Lbl}{\I_2}} &=& \Max{\depth{\I_1}, \depth{\I_2}}
+    \end{IEEEeqnarray*}
       \caption{Depth of Coercions}
       \label{fig:se_depth}
     \end{subfigure}
@@ -719,7 +764,7 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
     \failed{\I_1}{\Lbl}{\I_2}
     \end{align*}
     \caption{Compose Space-Efficient Coercions}
-    \label{fig:composeMed}
+    \label{fig:composeInt}
       \end{subfigure}%
     \begin{subfigure}{.5\textwidth}
     \begin{gather*}
@@ -852,8 +897,11 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
     \end{align*}
     \caption{Coercion to Hyper-Coercion}
     \label{fig:c2h}
-  \end{subfigure}
+    \end{subfigure}
+    \caption{}
+    \label{fig:Crcn}
 \end{figure}
+
 
 
 %% \begin{pos}
@@ -884,8 +932,10 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:iso_wt}
   (\interp{\HC}{\T_1}{\T_2} respects well-typing.)\\
-  For all $\HC$, $\T_1$, and $\T_2$ where $\cwt{\HC}{\T_1}{\T_2}$
-  it is the case that $\cwt{\interp{\HC}{\T_1}{\T_2}}{\T_1}{\T_2}$
+  For all $\HC$, $\T_1$, and $\T_2$,
+  $\cwt{\HC}{\T_1}{\T_2}$
+  implies
+  $\cwt{\interp{\HC}{\T_1}{\T_2}}{\T_1}{\T_2}$.
 \end{lem}
 \begin{proof}
   Proof by induction on a bound of the depth of hyper-coercions ($n$),
@@ -899,8 +949,10 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:inv_wt}
   (\interp{\SE}{\T_1}{\T_2} respects well-typing.)\\
-  For all $\SE$, $\T_1$, and $\T_2$ where $\cwt{\SE}{\T_1}{\T_2}$
-  it is the case that $\cwt{\interp{\SE}{\T_1}{\T_2}}{\T_1}{\T_2}$
+  For all $\SE$, $\T_1$, and $\T_2$,
+  $\cwt{\SE}{\T_1}{\T_2}$
+  implies
+  $\cwt{\interp{\SE}{\T_1}{\T_2}}{\T_1}{\T_2}$.
 \end{lem}
 \begin{proof}
   Proof by induction on a bound of the depth of coercions ($n$),
@@ -914,8 +966,9 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:iso_id}
   (\interp{\HC}{\T_1}{\T_2} composed with \interp{\HC}{\T_1}{\T_2} is an identity.)\\
-  For all $n$, $\HC$, $\T_1$, and $\T_2$ where
-  $\cwt{\HC}{\T_1}{\T_2}$ it is the case that
+  For all $n$, $\HC$, $\T_1$, and $\T_2$,
+  $\cwt{\HC}{\T_1}{\T_2}$
+  implies
   $\interp{\interp{\HC}{\T_1}{\T_2}}{\T_1}{\T_2} = \HC$.
 \end{lem}
 \begin{proof}
@@ -930,8 +983,9 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:inv_id}
   (\interp{\SE}{\T_1}{\T_2} composed with \interp{\HC}{\T_1}{\T_2} is an identity.)\\
-  For all $n$, $\SE$, $\T_1$, and $\T_2$ where
-  $\cwt{\SE}{\T_1}{\T_2}$ it is the case that
+  For all $n$, $\SE$, $\T_1$, and $\T_2$,
+  $\cwt{\SE}{\T_1}{\T_2}$
+  implies
   $\interp{\interp{\SE}{\T_1}{\T_2}}{\T_1}{\T_2} = \SE$.
 \end{lem}
 \begin{proof}
@@ -947,10 +1001,11 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
   (\interp{\HC}{\T_1}{\T_2} is an isomorphism.)\\
   For all $\T_1$ and $\T_2$,
   \begin{itemize}
-    \item[]for all $\HC$ where $\cwt{\HC}{\T_1}{\T_2}$,
-      it is the case that $\interp{\interp{h}{\T_1}{\T_2}}{\T_1}{\T_2} = \HC$
-    \item[]and for all $\SE$ where $\cwt{\SE}{\T_1}{\T_2}$,
-      it is the case that $\interp{\interp{\SE}{\T_1}{\T_2}}{\T_1}{\T_2} = \SE$.
+  \item for all $\HC$,
+    $\cwt{\HC}{\T_1}{\T_2}$ implies
+    $\interp{\interp{h}{\T_1}{\T_2}}{\T_1}{\T_2} = \HC$
+  \item and for all $\SE$, $\cwt{\SE}{\T_1}{\T_2}$ implies
+      $\interp{\interp{\SE}{\T_1}{\T_2}}{\T_1}{\T_2} = \SE$.
   \end{itemize}
 \end{thm}
 \begin{proof}
@@ -960,8 +1015,8 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:iso_mk}
   (\interp{\HC}{\T_1}{\T_2} respects make coercion.)\\
-  Forall $\T_1$, $\T_2$, and $\HC$, such that
-  $\mkcrcn{\T_1}{\T_2} = \HC$, it is the case that
+  Forall $\T_1$, $\T_2$, and $\HC$, 
+  $\mkcrcn{\T_1}{\T_2} = \HC$ implies
   $\mkcrcn{\T_1}{\T_2} = \interp{\HC}{\T_1}{\T_2}$.
 \end{lem}
 \begin{proof}
@@ -976,12 +1031,12 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 \begin{lem}
   \label{lem:iso_bound}
   (\interp{\HC}{\T_1}{\T_2} doesn't increase depth.)\\
-  For all $\HC$, $\T_1$, and $\T_2$, where
+  For all $\HC$, $\T_1$, and $\T_2$,
   $\depth{\HC} \le n$ and
-  $\cwt{\HC}{\T_1}{\T_2}$,
-  it is the case that
+  $\cwt{\HC}{\T_1}{\T_2}$
+  imply that
   $\depth{\interp{\HC}{\T_1}{\T_2}} \, \le \, \depth{\HC}$
-\end{lem}
+\end{lem}%
 \begin{proof}
   Induction on a bound, $n$, of the depth of $\HC$ where
   $\depth{\HC} < n$.
@@ -1030,17 +1085,18 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
         the inductive hypothesis.
       \item For each make hyper-coercion call we show that the a
         equivalent make coercion call via Lemma~\ref{lem:iso_mk}.
-        Additionally via Lemma~\ref{lem:mk_hc_depth} and
+        Additionally via Corralary~\ref{lem:mk_hc_depth} and
         Lemma~\ref{lem:mk_hc_wt}, the result
-        of the make hyper-coercion call is a candidate for
+        of the make hyper-coercion is a candidate for
         use with the inductive hypothesis. 
       \item For each recursive call to compose hyper-coercions,
         we show that an equivalent compose-coercions call exists
         via the inductive hypothesis.
-      \item Using the information from the calls to the inductive
-        hypothesis it is trivial to show that in each case the
+      \item By using the information from uses of the inductive
+        hypothesis, it is trivial to show that in each case the
         compose operation results in the same hyper-coercion. 
     \end{itemize}
+  \end{itemize}
 \end{proof}
 
 \begin{cor}
@@ -1058,17 +1114,19 @@ Lemma~\ref{lem:thm:help} and Lemma~\ref{lem:composeIWDF}.
 
 \clearpage
 
-While implementing the hyper-coercion semantics we discovered
-a simpler formulation of hyper-coercions that is easier to work
-with in the compiler. The intuition behind the change
-is that failed hyper-coercions can simply be represented as a
-intermediating coercion between two inconsistent types.
-This results in the composition function has less
-special cases for hyper-coercions that will result in a failed
-cast. Schml implements this semantics, which seems to be
-isomorphic to the first. This isomorphism remains to be proven.
-
 \section{Schml's Representation of Hyper-Coercions}
+\label{sec:schml}
+
+While implementing the hyper-coercion representation of casts in
+Schml, we discovered a simpler formulation of hyper-coercions that is
+easier to work with in the compiler.  The intuition behind the change
+is that failed hyper-coercions can be represented as a intermediating
+coercion between two inconsistent types.  This results in the
+composition function having less special cases for failed
+hyper-coercions.  Schml implements this representation, which seems to
+be isomorphic to the first. This isomorphism remains to be proven.
+
+
 \begin{figure}[tbh]
   \centering
   \begin{subfigure}{.5\textwidth}
@@ -1141,7 +1199,7 @@ isomorphic to the first. This isomorphism remains to be proven.
       &=  \hc{\Prj}{\I_1}{\cmpm{\cmpm{\Med_1}{\mkIcrcn{\I_2}{\I_3}}}{\Med_2}}{\I_4}{\Inj} %
     \end{align*}
     \caption{Compose Hyper Coercions (Alternate)}
-    \label{fig:composeHC}
+    \label{fig:composeHCAlt}
   \end{subfigure}%
   \begin{subfigure}{.5\textwidth}
     \begin{align*}
@@ -1157,7 +1215,7 @@ isomorphic to the first. This isomorphism remains to be proven.
       & m \neq \id \wedge m \neq \failed{\I_3}{\Lbl_2}{\I_4}
     \end{align*}
     \caption{Compose Intermediates (Alternate)}
-    \label{fig:composeMed}
+    \label{fig:composeMedAlt}
   \end{subfigure}
 \end{figure}
 
@@ -1167,7 +1225,9 @@ isomorphic to the first. This isomorphism remains to be proven.
 We have benchmarked the performance of hyper-coercions and our initial
 finding is that they have almost identical performance to Schml's
 space-efficient coercion implementation of gradual typing.
-The following figures show the results of the benchmarks.
+Figures~\ref{fig:static_results}, \ref{fig:dyn_results},
+\ref{fig:grd_matmult}, and~\ref{fig:grd_quicksort} show these results
+of the benchmarks.
 
 \begin{figure}
   \includegraphics[scale=.47]{static.png}
@@ -1208,16 +1268,16 @@ The following figures show the results of the benchmarks.
   \label{fig:grd_quicksort}
 \end{figure}
 
-\subsection{Why Hyper-Coercions Don't Improve Performance}
+\paragraph{Why Hyper-Coercions Don't Improve Performance:}
 We initially thought that the hyper-coercion representation
 would improve performance, but careful reflection due to
-these results indicates that we shouldn't have believe
-we would see significant gains from a naive implementation.
+these results indicates that we shouldn't have expected
+significant gains from a naive implementation.
 Most of this argument hinges on the fact that we suspect
 that most common casts in a program are known statically.
 This can obviously vary between programs, and we will
 ultimately need empirical evidence to back this belief,
-but if this is the case then a naive implementation of
+but if this is the case, then a naive implementation of
 hyper-coercions is actually a slight deoptimization
 over Schml's coercion representation. 
 
@@ -1226,36 +1286,33 @@ would primarily increase performance by decreasing
 the amount of indirections through memory needed to
 apply and compose coercions. This would indicate that
 larger coercions with more indirections would benefit
-more from the hyper-coercion representation that smaller
+more from the hyper-coercion representation than smaller,
 less complex coercions. 
 The casts that should benefit the most from hyper-coercions
 are those that perform a projection, a mediating cast,
 and an injection, and those that should benefit the
 least are those that only perform a projection, intermediating
-cast, or injection.
-The trade off for increasing locality is that the code
-that handles casting is slightly more complicated.
+cast, or injection. In fact the current implementation
+actually increases the number of indirections through
+memory for lone intermediating casts. 
 
-But if the most common casts are those that we know statically
+But if the most common casts are those that we know statically,
 then the casts that benefit the least are actually the most
 common case, because statically known casts never do more
 than project, inject, or intermediate. Thus, one problem
 with hyper-coercions are that they are optimizing for the uncommon case. 
-
 This is made worse by the fact the Schml compiler optimizes
-away the indirections for projections and injections coercions
-when they are not sub-components of intermediating coercions.
-This means that projections and injections are paying the cost
-of the slightly more complicated casting code without gaining
-any extra memory locality. Furthermore, the other common
-case lone mediating coercions also pays an additional indirection
-over the coercions representation.
+away the indirections for projections and injections for regular
+coercions when they are not sub-components of intermediating coercions.
+This means that, for projections and injections, the locality in
+hyper-coercions should be equal and, for mediating coercions,
+the locality has gotten worse. 
 
 \section{Future Work}
 \label{sec:future_work}
 While the performance results of hyper-coercions are
 disappointing, the Schml implementation of hyper-coercions
-is very direct and doesn't optimize many cases where
+is very direct and doesn't optimize any cases where
 hyper-coercions make it obvious that we should.
 Many aspects of this could be cleared up without modifying
 the semantics.
@@ -1263,8 +1320,8 @@ the semantics.
 \paragraph{Compiling Static Coercions Better:}
 We currently do not specialize the code that performs
 casts where the input coercions are known. This is
-something that we have considered for a while
-but hyper-coercions make it obvious that we should
+something that we have considered,
+but hyper-coercions make it obvious that we should,
 because the casting operation for hyper-coercions
 performs trivial but redundant work for all but
 the most complicated coercions. The optimization
@@ -1278,23 +1335,22 @@ that runs after the lowering of casts.
 Hyper-Coercions that perform only an identity,
 projection, injection, and intermediating cast
 contain redundant information that isn't needed
-for casting or composing. In fact for all ``one cast''
-hyper-coercions we could imagine storing all of the
-relevant information in one machine register, and
-avoid touching memory at all for these simple
-cases. This optimization is possible for coercions
-and hyper-coercions alike. 
+for casting or composing. The most important case
+to fix would be mediating coercions, because it
+seems like this is the only place we are paying
+for the hyper-coercion representation. This seems
+like a fundamental flaw in hyper-coercions and
+the model should be adjusted to help fix this
+particular case. 
 
 \paragraph{Characterizing Casts in Real Code}
-The speculation that static know casts are most
-common is just our intuition. It is mandatory
-that we start trying to characterize the
-number and type of casts that are generate
-by gradualizing real programs. 
+The speculation that static known casts are most
+common is just our intuition. We should investigate
+the benchmarks that we currently support in order
+to characterize the frequency and type of casts
+that gradual programs generate. 
 
 \paragraph{Increasing the Complexity of Benchmarked Code}
-It is non-obvious that the previous optimizations
-will benefit hyper-coercions more than coercions.
 It could be the case that after these optimizations
 the general trend is that hyper-coercions and coercions
 still have equal performance. If this is the case we conjecture
@@ -1303,16 +1359,6 @@ complicated enough casts to benefit from hyper-coercions.
 In this case we should investigate adding benchmarks that
 that examine the highly gradual case that we believe hyper-coercions
 should improve upon.
-
-\paragraph{Increasing the Statistical Rigor of Benchmarks}
-Recent research has shown me the importance of using
-statistically rigorous methods of benchmarking.
-While we have tried to always be correct in our benchmarking
-practices, we really should be calculating the confidence
-intervals for every single mean that we report. 
-
-
-\section{Conclusion}
 
 \bibliographystyle{abbrvnat}
 \bibliography{all}
